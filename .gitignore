@@ -1,4 +1,6 @@
 runs/*/datasets/
+runs/*/big-training-run-chart.png
+runs/*/checkpoints/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

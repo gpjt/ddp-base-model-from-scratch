@@ -15,7 +15,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import Dataset
 
-from checkpointing import get_checkpoints_dir, save_checkpoint
+from checkpointing import get_checkpoints_dir, load_checkpoint, save_checkpoint
 from gpt import GPTModel
 
 
@@ -68,7 +68,7 @@ def get_training_data(run_dir):
 
 
 def generate_training_chart(run_dir):
-    train_points, val_points, best_train_ds_offset = get_training_data()
+    train_points, val_points, best_train_ds_offset = get_training_data(run_dir)
 
     plt.title("TRAINING RUN LOSS")
     plt.xkcd()
@@ -209,7 +209,7 @@ def main(run, checkpoint):
 
     if checkpoint:
         train_ds_offset, best_loss = load_checkpoint(
-            checkpoint, model, optimizer, scaler
+            run_dir, checkpoint, model, optimizer, scaler
         )
     else:
         train_ds_offset = 0
