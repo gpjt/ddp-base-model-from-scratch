@@ -114,9 +114,12 @@ def train(
 
     torch.set_float32_matmul_precision("high")
 
-    print(f"Starting training at dataset offset {train_ds_offset}")
+    rank = dist.get_rank()
+    world_size = dist.get_world_size()
+
+    print(f"Starting rank {rank} training at dataset offset {train_ds_offset + rank}")
     train_losses = []
-    for ix in tqdm(range(train_ds_offset, len(train_ds))):
+    for ix in tqdm(range(train_ds_offset + rank, len(train_ds), world_size)):
         model.train()
         inputs, targets = train_ds[ix]
         inputs = inputs.to(device).to(torch.long)
