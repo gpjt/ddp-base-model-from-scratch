@@ -23,12 +23,12 @@ def load_checkpoint(run_dir, checkpoint, model, optimizer=None, scaler=None):
 
     with open(checkpoint_dir / "meta.json", "r") as f:
         meta = json.load(f)
-        restart_ds_offset = meta["train_ds_offset"] + 1
+        restart_global_step = meta["global_step"] + 1
 
     with open(checkpoints_dir / "best" / "meta.json") as f:
         best_loss = json.load(f)["val_loss"]
 
-    return restart_ds_offset, best_loss
+    return restart_global_step, best_loss
 
 
 def save_checkpoint(
@@ -36,7 +36,7 @@ def save_checkpoint(
     name,
     model, optimizer, scaler,
     train_loss, val_loss,
-    train_ds_offset, is_best
+    global_step, is_best
 ):
     checkpoints_dir = get_checkpoints_dir(run_dir)
     if not checkpoints_dir.exists():
@@ -56,7 +56,7 @@ def save_checkpoint(
             dict(
                 train_loss=train_loss,
                 val_loss=val_loss,
-                train_ds_offset=train_ds_offset,
+                global_step=global_step,
                 is_best=is_best,
             ),
             f

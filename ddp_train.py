@@ -44,27 +44,27 @@ def get_training_data(run_dir):
 
     train_losses = []
     val_losses = []
-    best_train_ds_offset = None
+    best_global_step = None
     for item in checkpoints_dir.iterdir():
         if item.name == "latest":
             continue
 
         meta = json.loads((item / "meta.json").read_text())
         if item.name == "best":
-            best_train_ds_offset = meta["train_ds_offset"]
+            best_global_step = meta["global_step"]
             continue
 
-        train_losses.append((meta["train_ds_offset"], meta["train_loss"]))
-        val_losses.append((meta["train_ds_offset"], meta["val_loss"]))
+        train_losses.append((meta["global_step"], meta["train_loss"]))
+        val_losses.append((meta["global_step"], meta["val_loss"]))
 
     train_losses.sort(key=lambda x: x[0])
     val_losses.sort(key=lambda x: x[0])
 
-    return train_losses, val_losses, best_train_ds_offset
+    return train_losses, val_losses, best_global_step
 
 
 def generate_training_chart(run_dir):
-    train_points, val_points, best_train_ds_offset = get_training_data(run_dir)
+    train_points, val_points, best_global_step = get_training_data(run_dir)
 
     plt.title("TRAINING RUN LOSS")
     plt.xkcd()
@@ -78,8 +78,8 @@ def generate_training_chart(run_dir):
     ax.plot(val_epochs, val_losses, label="VALIDATION LOSS", marker="s")
 
     ax.axvline(
-        best_train_ds_offset, color="red", linestyle="--", linewidth=1.5,
-        label="BEST ITERATION"
+        best_global_step, color="red", linestyle="--", linewidth=1.5,
+        label="BEST GLOBAL STEP"
     )
 
     ax.set_title("TRAINING RUN LOSS")
@@ -104,7 +104,7 @@ def train(
     run_dir,
     model, optimizer, scaler,
     train_ds, val_ds,
-    train_ds_offset, best_loss,
+    start_global_step, best_loss,
     validation_interval, validation_batches,
 ):
     device = next(model.parameters()).device
@@ -114,11 +114,13 @@ def train(
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 
-    print(f"Starting rank {rank} training at dataset offset {train_ds_offset + rank}")
+    total_global_steps = len(train_ds) // world_size
+
+    print(f"Starting rank {rank} training at global step {start_global_step}")
     train_losses = []
-    for ix in tqdm(range(train_ds_offset + rank, len(train_ds), world_size)):
+    for global_step in tqdm(range(start_global_step, total_global_steps)):
         model.train()
-        inputs, targets = train_ds[ix]
+        inputs, targets = train_ds[global_step * world_size + rank]
         inputs = inputs.to(device).to(torch.long)
         targets = targets.to(device).to(torch.long)
 
@@ -135,8 +137,8 @@ def train(
         train_losses.append(train_loss.item())
 
         is_eval_iter = (
-            (ix % validation_interval == 0)
-            or (ix == len(train_ds) - 1)
+            (global_step % validation_interval == 0)
+            or (global_step == total_global_steps - 1)
         )
         if is_eval_iter:
             dist.barrier()
@@ -168,10 +170,10 @@ def train(
 
                 save_checkpoint(
                     run_dir,
-                    f"iteration-{ix}",
+                    f"iteration-{global_step}",
                     base_model, optimizer, scaler,
                     avg_train_loss, val_loss,
-                    ix,
+                    global_step,
                     is_best
                 )
                 generate_training_chart(run_dir)
@@ -238,11 +240,11 @@ def main(run, checkpoint):
     )
 
     if checkpoint:
-        train_ds_offset, best_loss = load_checkpoint(
+        global_step, best_loss = load_checkpoint(
             run_dir, checkpoint, model, optimizer, scaler
         )
     else:
-        train_ds_offset = 0
+        global_step = 0
         best_loss = None
 
     ddp_model = DDP(model, device_ids=[local_rank])
@@ -251,7 +253,7 @@ def main(run, checkpoint):
         run_dir,
         ddp_model, optimizer, scaler,
         train_ds, val_ds,
-        train_ds_offset, best_loss,
+        global_step, best_loss,
         train_conf["validation_interval"], train_conf["validation_batches"],
     )
 
