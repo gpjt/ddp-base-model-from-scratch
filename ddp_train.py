@@ -1,7 +1,29 @@
 import json
+import os
 from pathlib import Path
 
 import click
+
+import torch
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+from gpt import GPTModel
+
+
+def train(model_conf):
+    torch.accelerator.set_device_index(int(os.environ["LOCAL_RANK"]))
+    acc = torch.accelerator.current_accelerator()
+    backend = torch.distributed.get_default_backend_for_device(acc)
+    dist.init_process_group(backend)
+    rank = dist.get_rank()
+    print(f"On rank {rank}.")
+    device_id = rank % torch.accelerator.device_count()
+
+    model = GPTModel(model_conf).to(device_id)
+    ddp_model = DDP(model, device_ids=[device_id])
+
+    dist.destroy_process_group()
 
 
 @click.command()
@@ -17,7 +39,7 @@ def main(run):
     with open(model_conf_file, "r") as f:
         model_conf = json.load(f)
 
-    print(model_conf)
+    train(model_conf)
 
 
 if __name__ == "__main__":
