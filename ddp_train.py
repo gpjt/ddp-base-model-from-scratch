@@ -137,42 +137,52 @@ def train(
         scaler.update()
         train_losses.append(train_loss.item())
 
-        if (ix % validation_interval == 0) or (ix == len(train_ds) - 1):
-            print("Validation/checkpoint")
-            model.eval()
-            base_model = model.module
-            with torch.inference_mode(), torch.amp.autocast(device_type=device.type, dtype=torch.float16):
-                val_losses = []
-                for val_inputs, val_targets in tqdm(val_ds[:validation_batches]):
-                    val_inputs = val_inputs.to(device).to(torch.long)
-                    val_targets = val_targets.to(device).to(torch.long)
-                    val_logits = base_model(val_inputs)
-                    val_losses.append(
-                        calculate_loss(val_logits, val_targets).item()
-                    )
-                val_loss = sum(val_losses) / len(val_losses)
+        is_eval_iter = (
+            (ix % validation_interval == 0)
+            or (ix == len(train_ds) - 1)
+        )
+        if is_eval_iter:
+            dist.barrier()
 
-            if best_loss is None or val_loss < best_loss:
-                is_best = True
-                best_loss = val_loss
-            else:
-                is_best = False
+            if rank == 0:
+                print("Validation/checkpoint")
+                model.eval()
 
-            avg_train_loss = sum(train_losses) / len(train_losses)
-            train_losses = []
+                base_model = model.module
+                with torch.inference_mode(), torch.amp.autocast(device_type=device.type, dtype=torch.float16):
+                    val_losses = []
+                    for val_inputs, val_targets in tqdm(val_ds[:validation_batches]):
+                        val_inputs = val_inputs.to(device).to(torch.long)
+                        val_targets = val_targets.to(device).to(torch.long)
+                        val_logits = base_model(val_inputs)
+                        val_losses.append(
+                            calculate_loss(val_logits, val_targets).item()
+                        )
+                    val_loss = sum(val_losses) / len(val_losses)
 
-            save_checkpoint(
-                run_dir,
-                f"iteration-{ix}",
-                base_model, optimizer, scaler,
-                avg_train_loss, val_loss,
-                ix,
-                is_best
-            )
-            generate_training_chart(run_dir)
+                if best_loss is None or val_loss < best_loss:
+                    is_best = True
+                    best_loss = val_loss
+                else:
+                    is_best = False
 
-            model.train()
-            print("Continuing training")
+                avg_train_loss = sum(train_losses) / len(train_losses)
+                train_losses = []
+
+                save_checkpoint(
+                    run_dir,
+                    f"iteration-{ix}",
+                    base_model, optimizer, scaler,
+                    avg_train_loss, val_loss,
+                    ix,
+                    is_best
+                )
+                generate_training_chart(run_dir)
+
+                model.train()
+                print("Continuing training")
+
+            dist.barrier()
 
     dist.destroy_process_group()
 
