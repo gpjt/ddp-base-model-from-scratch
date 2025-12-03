@@ -183,7 +183,6 @@ def train(
 
             dist.barrier()
 
-    dist.destroy_process_group()
 
 
 @click.command()
@@ -256,6 +255,8 @@ def main(run, checkpoint):
         global_step, best_loss,
         train_conf["validation_interval"], train_conf["validation_batches"],
     )
+
+    dist.destroy_process_group()
 
 
 if __name__ == "__main__":
