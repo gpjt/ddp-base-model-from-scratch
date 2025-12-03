@@ -83,7 +83,7 @@ def generate_training_chart(run_dir):
     )
 
     ax.set_title("TRAINING RUN LOSS")
-    ax.set_xlabel("ITERATION")
+    ax.set_xlabel("GLOBAL STEP")
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_ylabel("LOSS")
     ax.legend()
