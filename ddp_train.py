@@ -207,15 +207,23 @@ def main(run, checkpoint):
     with open(train_conf_file, "r") as f:
         train_conf = json.load(f)
 
-    torch.accelerator.set_device_index(int(os.environ["LOCAL_RANK"]))
+    # Which of the one-per-GPU processes are we?
+    rank = int(os.environ["LOCAL_RANK"])
+
+    # Set ourselves up to use the GPU with ID `rank`
+    torch.accelerator.set_device_index(rank)
+
+    # Get the accelerator object associated with that GPU,
+    # and the associated backend object (eg. `nccl` for CUDA):
     acc = torch.accelerator.current_accelerator()
     backend = torch.distributed.get_default_backend_for_device(acc)
-    dist.init_process_group(backend)
-    rank = dist.get_rank()
-    print(f"On rank {rank}.")
-    device_id = rank % torch.accelerator.device_count()
 
-    model = GPTModel(model_conf).to(device_id)
+    # Initialize torch.distributed; set the device ID explicitly
+    # to avoid warnings in `dist.barrier`
+    dist.init_process_group(backend, device_id=rank)
+
+    print(f"On rank {rank}.")
+    model = GPTModel(model_conf).to(rank)
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -241,7 +249,7 @@ def main(run, checkpoint):
         train_ds_offset = 0
         best_loss = None
 
-    ddp_model = DDP(model, device_ids=[device_id])
+    ddp_model = DDP(model, device_ids=[rank])
 
     train(
         run_dir,
