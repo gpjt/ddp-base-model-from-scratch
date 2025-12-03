@@ -137,12 +137,13 @@ def train(
         if (ix % VAL_AND_CHECKPOINT_INTERVAL == 0) or (ix == len(train_ds) - 1):
             print("Validation/checkpoint")
             model.eval()
+            base_model = model.module
             with torch.inference_mode(), torch.amp.autocast(device_type=device.type, dtype=torch.float16):
                 val_losses = []
                 for val_inputs, val_targets in tqdm(val_ds):
                     val_inputs = val_inputs.to(device).to(torch.long)
                     val_targets = val_targets.to(device).to(torch.long)
-                    val_logits = model(val_inputs)
+                    val_logits = base_model(val_inputs)
                     val_losses.append(
                         calculate_loss(val_logits, val_targets).item()
                     )
@@ -160,7 +161,7 @@ def train(
             save_checkpoint(
                 run_dir,
                 f"iteration-{ix}",
-                model, optimizer, scaler,
+                base_model, optimizer, scaler,
                 avg_train_loss, val_loss,
                 ix,
                 is_best
