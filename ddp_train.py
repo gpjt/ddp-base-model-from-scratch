@@ -19,15 +19,14 @@ from checkpointing import get_checkpoints_dir, load_checkpoint, save_checkpoint
 from gpt import GPTModel
 
 
-BATCH_SIZE = 6
 VAL_AND_CHECKPOINT_INTERVAL = 2000
 
 
 class BigTrainDataset(Dataset):
 
-    def __init__(self, all_tokens, seq_length):
-        self.xs = all_tokens[:-1].reshape(-1, BATCH_SIZE, seq_length)
-        self.ys = all_tokens[1:].reshape(-1, BATCH_SIZE, seq_length)
+    def __init__(self, all_tokens, seq_length, minibatch_size):
+        self.xs = all_tokens[:-1].reshape(-1, minibatch_size, seq_length)
+        self.ys = all_tokens[1:].reshape(-1, minibatch_size, seq_length)
 
     def __getitem__(self, ix):
         return (self.xs[ix], self.ys[ix])
@@ -36,10 +35,10 @@ class BigTrainDataset(Dataset):
         return self.xs.shape[0]
 
 
-def load_dataset(run_dir, split, seq_length):
+def load_dataset(run_dir, split, seq_length, minibatch_size):
     return BigTrainDataset(
         load_file(run_dir / "datasets" / f"{split}.safetensors")["tokens"],
-        seq_length,
+        seq_length, minibatch_size,
     )
 
 
@@ -188,6 +187,12 @@ def main(run, checkpoint):
     with open(model_conf_file, "r") as f:
         model_conf = json.load(f)
 
+    train_conf_file = run_dir / "train.json"
+    if not train_conf_file.is_file():
+        raise Exception(f"Could not find train config in {train_conf_file}")
+    with open(train_conf_file, "r") as f:
+        train_conf = json.load(f)
+
     torch.accelerator.set_device_index(int(os.environ["LOCAL_RANK"]))
     acc = torch.accelerator.current_accelerator()
     backend = torch.distributed.get_default_backend_for_device(acc)
@@ -205,8 +210,14 @@ def main(run, checkpoint):
 
     scaler = torch.amp.GradScaler()
 
-    train_ds = load_dataset(run_dir, "train", model_conf["context_length"])
-    val_ds = load_dataset(run_dir, "validation", model_conf["context_length"])
+    train_ds = load_dataset(
+        run_dir, "train",
+        model_conf["context_length"], train_conf["minibatch_size"]
+    )
+    val_ds = load_dataset(
+        run_dir, "validation",
+        model_conf["context_length"], train_conf["minibatch_size"]
+    )
 
     if checkpoint:
         train_ds_offset, best_loss = load_checkpoint(
