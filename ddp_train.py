@@ -150,7 +150,8 @@ def train(
                 base_model = model.module
                 with torch.inference_mode(), torch.amp.autocast(device_type=device.type, dtype=torch.float16):
                     val_losses = []
-                    for val_inputs, val_targets in tqdm(val_ds[:validation_batches]):
+                    for val_ix in tqdm(range(validation_batches)):
+                        val_inputs, val_targets = val_ds[val_ix]
                         val_inputs = val_inputs.to(device).to(torch.long)
                         val_targets = val_targets.to(device).to(torch.long)
                         val_logits = base_model(val_inputs)
