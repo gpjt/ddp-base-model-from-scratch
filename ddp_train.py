@@ -19,9 +19,6 @@ from checkpointing import get_checkpoints_dir, load_checkpoint, save_checkpoint
 from gpt import GPTModel
 
 
-VAL_AND_CHECKPOINT_INTERVAL = 2000
-
-
 class BigTrainDataset(Dataset):
 
     def __init__(self, all_tokens, seq_length, minibatch_size):
