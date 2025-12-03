@@ -107,7 +107,8 @@ def train(
     run_dir,
     model, optimizer, scaler,
     train_ds, val_ds,
-    train_ds_offset, best_loss
+    train_ds_offset, best_loss,
+    validation_interval, validation_batches,
 ):
     device = next(model.parameters()).device
 
@@ -133,13 +134,13 @@ def train(
         scaler.update()
         train_losses.append(train_loss.item())
 
-        if (ix % VAL_AND_CHECKPOINT_INTERVAL == 0) or (ix == len(train_ds) - 1):
+        if (ix % validation_interval == 0) or (ix == len(train_ds) - 1):
             print("Validation/checkpoint")
             model.eval()
             base_model = model.module
             with torch.inference_mode(), torch.amp.autocast(device_type=device.type, dtype=torch.float16):
                 val_losses = []
-                for val_inputs, val_targets in tqdm(val_ds):
+                for val_inputs, val_targets in tqdm(val_ds[:validation_batches]):
                     val_inputs = val_inputs.to(device).to(torch.long)
                     val_targets = val_targets.to(device).to(torch.long)
                     val_logits = base_model(val_inputs)
@@ -233,7 +234,8 @@ def main(run, checkpoint):
         run_dir,
         ddp_model, optimizer, scaler,
         train_ds, val_ds,
-        train_ds_offset, best_loss
+        train_ds_offset, best_loss,
+        train_conf["validation_interval"], train_conf["validation_batches"],
     )
 
 
