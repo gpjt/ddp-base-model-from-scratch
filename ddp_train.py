@@ -20,15 +20,14 @@ from gpt import GPTModel
 
 
 BATCH_SIZE = 6
-SEQ_LENGTH = 1024
 VAL_AND_CHECKPOINT_INTERVAL = 2000
 
 
 class BigTrainDataset(Dataset):
 
-    def __init__(self, all_tokens):
-        self.xs = all_tokens[:-1].reshape(-1, BATCH_SIZE, SEQ_LENGTH)
-        self.ys = all_tokens[1:].reshape(-1, BATCH_SIZE, SEQ_LENGTH)
+    def __init__(self, all_tokens, seq_length):
+        self.xs = all_tokens[:-1].reshape(-1, BATCH_SIZE, seq_length)
+        self.ys = all_tokens[1:].reshape(-1, BATCH_SIZE, seq_length)
 
     def __getitem__(self, ix):
         return (self.xs[ix], self.ys[ix])
@@ -37,9 +36,10 @@ class BigTrainDataset(Dataset):
         return self.xs.shape[0]
 
 
-def load_dataset(run_dir, split):
+def load_dataset(run_dir, split, seq_length):
     return BigTrainDataset(
-        load_file(run_dir / "datasets" / f"{split}.safetensors")["tokens"]
+        load_file(run_dir / "datasets" / f"{split}.safetensors")["tokens"],
+        seq_length,
     )
 
 
@@ -205,8 +205,8 @@ def main(run, checkpoint):
 
     scaler = torch.amp.GradScaler()
 
-    train_ds = load_dataset(run_dir, "train")
-    val_ds = load_dataset(run_dir, "validation")
+    train_ds = load_dataset(run_dir, "train", model_conf["context_length"])
+    val_ds = load_dataset(run_dir, "validation", model_conf["context_length"])
 
     if checkpoint:
         train_ds_offset, best_loss = load_checkpoint(
