@@ -27,6 +27,7 @@ def build_and_save_dataset_tensor(ds, tokenizer, path):
         results.append(torch.tensor(all_tokens, dtype=torch.uint16))
         num_tokens += len(all_tokens)
     result = torch.cat(results)
+    results = None
     print(f"Saving {result.shape[0]} tokens to {path}")
     save_file({"tokens": result}, path)
 
