@@ -5,6 +5,8 @@ from pathlib import Path
 import click
 from tqdm import tqdm
 
+from huggingface_hub import snapshot_download
+
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
@@ -32,9 +34,19 @@ class BigTrainDataset(Dataset):
         return self.xs.shape[0]
 
 
-def load_dataset(run_dir, split, seq_length, minibatch_size):
+def download_dataset(datasets_dir, dataset_name):
+    download_path = snapshot_download(
+        f"{dataset_name}",
+        repo_type="dataset",
+        local_dir=datasets_dir / dataset_name,
+        allow_patterns="*"
+    )
+    return Path(download_path)
+
+
+def load_dataset(dataset_dir, split, seq_length, minibatch_size):
     return BigTrainDataset(
-        load_file(run_dir / "datasets" / f"{split}.safetensors")["tokens"],
+        load_file(dataset_dir / f"{split}.safetensors")["tokens"],
         seq_length, minibatch_size,
     )
 
@@ -188,8 +200,9 @@ def train(
 
 @click.command()
 @click.argument("run")
+@click.argument("datasets_dir_path")
 @click.argument("checkpoint", default=None)
-def main(run, checkpoint):
+def main(run, datasets_dir_path, checkpoint):
     run_dir = Path(__file__).resolve().parent / "runs" / run
     if not run_dir.is_dir():
         raise Exception(f"Could not find run dir {run_dir}")
@@ -230,12 +243,17 @@ def main(run, checkpoint):
 
     scaler = torch.amp.GradScaler()
 
+    datasets_dir = Path(datasets_dir_path)
+    if not datasets_dir.is_dir():
+        raise Exception(f"{datasets_dir_path} is not a directory")
+    dataset_dir = download_dataset(datasets_dir, train_conf["dataset"])
+
     train_ds = load_dataset(
-        run_dir, "train",
+        dataset_dir, "train",
         model_conf["context_length"], train_conf["minibatch_size"]
     )
     val_ds = load_dataset(
-        run_dir, "validation",
+        dataset_dir, "validation",
         model_conf["context_length"], train_conf["minibatch_size"]
     )
 

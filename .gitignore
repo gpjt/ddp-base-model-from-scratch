@@ -1,9 +1,4 @@
-fineweb/
-fineweb-edu/
-fineweb-prepared/
-fineweb-edu-prepared/
-
-runs/*/datasets/
+datasets/
 runs/*/big-training-run-chart.png
 runs/*/checkpoints/
 
