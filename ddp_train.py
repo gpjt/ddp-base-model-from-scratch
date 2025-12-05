@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from pathlib import Path
 
 import click
@@ -142,7 +143,7 @@ def train(
     model, optimizer, scaler,
     train_ds, val_ds,
     start_global_step, best_loss,
-    validation_interval, validation_batches,
+    validation_interval, validation_batches
 ):
     device = next(model.parameters()).device
 
@@ -155,7 +156,14 @@ def train(
 
     print(f"Starting rank {rank} training at global step {start_global_step}")
     train_losses = []
-    for global_step in tqdm(range(start_global_step, total_global_steps), disable=(rank != 0)):
+    start_time = time.time()
+    tokens_seen_this_rank = 0
+
+    progress_bar = tqdm(
+        range(start_global_step, total_global_steps),
+        disable=(rank != 0)
+    )
+    for global_step in progress_bar:
         model.train()
         inputs, targets = train_ds[global_step * world_size + rank]
         inputs = inputs.to(device).to(torch.long)
@@ -172,6 +180,18 @@ def train(
         scaler.step(optimizer)
         scaler.update()
         train_losses.append(train_loss.item())
+
+        minibatch_size, sequence_length = inputs.shape
+        tokens_seen_this_rank += minibatch_size * sequence_length
+
+        if rank == 0:
+            elapsed_time = time.time() - start_time
+            tokens_per_sec = (tokens_seen_this_rank * world_size) / elapsed_time
+            progress_bar.set_postfix(
+                loss=f"{train_loss.item():.3f}",
+                tps=f"{tokens_per_sec:,.0f}"
+            )
+
 
         is_eval_iter = (
             (global_step % validation_interval == 0)
