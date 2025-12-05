@@ -44,9 +44,25 @@ def download_dataset(datasets_dir, dataset_name):
     return Path(download_path)
 
 
-def load_dataset(dataset_dir, split, seq_length, minibatch_size):
+def load_dataset(
+    dataset_dir, split,
+    min_tokens, start_token,
+    world_size, minibatch_size,
+    seq_length
+):
+    full_dataset = load_file(dataset_dir / f"{split}.safetensors")["tokens"]
+
+    one_full_batch_tokens = world_size * minibatch_size * seq_length
+    batches_for_just_over_min = (min_tokens // one_full_batch_tokens) + 1
+
+    # Note that we need one extra token for our Ys.
+    tokens_needed = (batches_for_just_over_min * one_full_batch_tokens) + 1
+
+    if len(full_dataset) < start_token + tokens_needed:
+        raise Exception(f"Not enough tokens (wanted {start_token + tokens_needed}, got {len(full_dataset)})")
+
     return BigTrainDataset(
-        load_file(dataset_dir / f"{split}.safetensors")["tokens"],
+        full_dataset[start_token:start_token + tokens_needed],
         seq_length, minibatch_size,
     )
 
@@ -250,7 +266,9 @@ def main(run, datasets_dir_path, checkpoint):
 
     train_ds = load_dataset(
         dataset_dir, "train",
-        model_conf["context_length"], train_conf["minibatch_size"]
+        train_conf["min_train_tokens"], train_conf["start_train_token"],
+        dist.get_world_size(), train_conf["minibatch_size"],
+        model_conf["context_length"]
     )
     val_ds = load_dataset(
         dataset_dir, "validation",
