@@ -155,7 +155,7 @@ def train(
 
     print(f"Starting rank {rank} training at global step {start_global_step}")
     train_losses = []
-    for global_step in tqdm(range(start_global_step, total_global_steps)):
+    for global_step in tqdm(range(start_global_step, total_global_steps), disable=(rank != 0)):
         model.train()
         inputs, targets = train_ds[global_step * world_size + rank]
         inputs = inputs.to(device).to(torch.long)
@@ -181,7 +181,7 @@ def train(
             dist.barrier()
 
             if rank == 0:
-                print("Validation/checkpoint")
+                print("\n\n\nValidation/checkpoint")
                 model.eval()
 
                 base_model = model.module
@@ -217,7 +217,7 @@ def train(
                 generate_training_chart(run_dir)
 
                 model.train()
-                print("Continuing training")
+                print("\nContinuing training")
 
             dist.barrier()
 
