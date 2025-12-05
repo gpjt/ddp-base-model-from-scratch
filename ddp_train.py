@@ -241,6 +241,16 @@ def train(
 
             dist.barrier()
 
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+
+    if rank == 0:
+        print(f"\n\n\nTraining complete in {elapsed_time:,.3f} seconds")
+        total_tokens_seen = tokens_seen_this_rank * world_size
+        print(f"Tokens seen: {total_tokens_seen:,.0f}")
+        print(f"Throughput: {total_tokens_seen / elapsed_time:,.0f} tokens/second")
+        print(f"Final train loss: {avg_train_loss:.3f}")
+        print(f"Final val loss: {val_loss:.3f}")
 
 
 @click.command()
