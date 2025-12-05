@@ -51,12 +51,21 @@ def load_dataset(
     seq_length
 ):
     full_dataset = load_file(dataset_dir / f"{split}.safetensors")["tokens"]
+    if start_token > len(full_dataset):
+        raise Exception(f"start_token {start_token} is past the end of the dataset")
 
     one_full_batch_tokens = world_size * minibatch_size * seq_length
-    batches_for_just_over_min = (min_tokens // one_full_batch_tokens) + 1
+
+    if min_tokens == -1:
+        available_tokens = len(full_dataset) - start_token
+        available_batches = (available_tokens // one_full_batch_tokens)
+        tokens_needed = available_batches * one_full_batch_tokens
+    else:
+        batches_for_just_over_min = (min_tokens // one_full_batch_tokens) + 1
+        tokens_needed = batches_for_just_over_min * one_full_batch_tokens
 
     # Note that we need one extra token for our Ys.
-    tokens_needed = (batches_for_just_over_min * one_full_batch_tokens) + 1
+    tokens_needed += 1
 
     if len(full_dataset) < start_token + tokens_needed:
         raise Exception(f"Not enough tokens (wanted {start_token + tokens_needed}, got {len(full_dataset)})")
@@ -272,7 +281,9 @@ def main(run, datasets_dir_path, checkpoint):
     )
     val_ds = load_dataset(
         dataset_dir, "validation",
-        model_conf["context_length"], train_conf["minibatch_size"]
+        -1, train_conf["start_val_token"],
+        dist.get_world_size(), train_conf["minibatch_size"],
+        model_conf["context_length"]
     )
 
     if checkpoint:
