@@ -9,6 +9,7 @@ from tqdm import tqdm
 from huggingface_hub import snapshot_download
 
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
 from matplotlib.ticker import MaxNLocator
 
 from safetensors.torch import load_file
@@ -106,7 +107,15 @@ def generate_training_chart(run_dir):
 
     plt.title("TRAINING RUN LOSS")
     plt.xkcd()
-    plt.rcParams['font.family'] = "xkcd"
+
+    font_family = None
+    for f in font_manager.fontManager.ttflist:
+        if "xkcd" in f.name.lower():
+            font_family = f.name
+            break
+
+    if font_family is not None:
+        plt.rcParams['font.family'] = font_family
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
 
