@@ -63,8 +63,11 @@ def load_dataset(
         available_batches = (available_tokens // one_full_batch_tokens)
         tokens_needed = available_batches * one_full_batch_tokens
     else:
-        batches_for_just_over_min = (min_tokens // one_full_batch_tokens) + 1
-        tokens_needed = batches_for_just_over_min * one_full_batch_tokens
+        if min_tokens % one_full_batch_tokens == 0:
+            tokens_needed = min_tokens
+        else:
+            batches_for_just_over_min = (min_tokens // one_full_batch_tokens) + 1
+            tokens_needed = batches_for_just_over_min * one_full_batch_tokens
 
     # Note that we need one extra token for our Ys.
     tokens_needed += 1

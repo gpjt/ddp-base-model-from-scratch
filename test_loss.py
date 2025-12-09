@@ -40,7 +40,7 @@ def main(datasets_dir_path, model_safetensors_path):
     seq_len = 1024
     test_ds = load_dataset(
         dataset_dir, "validation",
-        batches * batch_size * seq_len - 1, 50_000_000,
+        batches * batch_size * seq_len, 50_000_000,
         world_size, batch_size,
         seq_len
     )
