@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import click
@@ -12,25 +13,25 @@ from gpt import GPTModel
 
 @click.command()
 @click.argument("datasets_dir_path")
+@click.argument("model_config_path")
 @click.argument("model_safetensors_path")
-def main(datasets_dir_path, model_safetensors_path):
+def main(datasets_dir_path, model_config_path, model_safetensors_path):
     datasets_dir = Path(datasets_dir_path)
     if not datasets_dir.is_dir():
         raise Exception(f"{datasets_dir_path} is not a directory")
     dataset_dir = download_dataset(datasets_dir, "gpjt/fineweb-gpt2-tokens")
 
+    if not Path(model_config_path).is_file():
+        raise Exception(f"Could not fine model config at {model_config_path}")
+    with open(model_config_path, "r") as f:
+        model_config = json.load(f)
+
+    if not Path(model_safetensors_path).is_file():
+        raise Exception(f"Could not fine model safetensors at {model_safetensors_path}")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    big_train_params = {
-        "vocab_size": 50257,
-        "context_length": 1024,
-        "emb_dim": 768,
-        "n_heads": 12,
-        "n_layers": 12,
-        "drop_rate": 0.1,
-        "qkv_bias": False
-    }
-    model = GPTModel(big_train_params)
+    model = GPTModel(model_config)
     model.load_state_dict(load_file(model_safetensors_path))
     model.to(device)
 
