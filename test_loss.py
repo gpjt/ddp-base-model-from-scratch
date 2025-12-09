@@ -44,7 +44,6 @@ def main(datasets_dir_path, model_safetensors_path):
         world_size, batch_size,
         seq_len
     )
-    print(test_ds.xs.shape)
 
     model.eval()
     with torch.inference_mode(), torch.amp.autocast(device_type=device.type, dtype=torch.float16):
