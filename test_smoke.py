@@ -21,13 +21,14 @@ def main(model_config_path, model_safetensors_path):
         model_config = json.load(f)
 
     if not Path(model_safetensors_path).is_file():
-        raise Exception(f"Could not fine model safetensors at {model_safetensors_path}")
+        raise Exception(f"Could not find model safetensors at {model_safetensors_path}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = GPTModel(model_config)
     model.load_state_dict(load_file(model_safetensors_path))
     model.to(device)
+    model.eval()
 
     tokenizer = tiktoken.get_encoding("gpt2")
 
@@ -37,21 +38,24 @@ def main(model_config_path, model_safetensors_path):
     num_tokens = 20
     temperature = 1.4
     top_k = 25
-    for ix in range(num_tokens):
-        input_tensor = torch.tensor(tokens).unsqueeze(0).to(device)
-        output_tensor = model(input_tensor)
-        logits = output_tensor[:, -1, :]
-        top_logits, _ = torch.topk(logits, top_k)
-        min_val = top_logits[:, -1]
-        logits = torch.where(
-            logits < min_val,
-            torch.tensor(-math.inf).to(logits.device),
-            logits
-        )
-        logits /= temperature
-        probs = torch.softmax(logits, dim=-1)
-        next_token = torch.multinomial(probs, num_samples=1)
-        tokens.append(next_token)
+    with torch.no_grad():
+        for ix in range(num_tokens):
+            input_tensor = torch.tensor(
+                tokens, dtype=torch.long, device=device
+            ).unsqueeze(0)
+            output_tensor = model(input_tensor)
+            logits = output_tensor[:, -1, :]
+            top_logits, _ = torch.topk(logits, top_k)
+            min_val = top_logits[:, -1]
+            logits = torch.where(
+                logits < min_val,
+                torch.tensor(-math.inf).to(logits.device),
+                logits
+            )
+            logits /= temperature
+            probs = torch.softmax(logits, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1).item()
+            tokens.append(next_token)
 
     print(tokenizer.decode(tokens))
 
