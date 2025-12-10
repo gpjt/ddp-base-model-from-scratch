@@ -202,7 +202,7 @@ def evaluate_model(model, val_loader, device, eval_iter):
 def train_model(
     model, train_loader, val_loader,
     optimizer, device,
-    eval_freq, eval_iter, start_context, tokenizer
+    eval_iter
 ):
     last_val_loss = None
     last_params = None
@@ -295,12 +295,12 @@ def generate_model_scores(json_data):
 @click.argument("model_safetensors_path")
 def main(model_config_path, model_safetensors_path):
     if not Path(model_config_path).is_file():
-        raise Exception(f"Could not fine model config at {model_config_path}")
+        raise Exception(f"Could not find model config at {model_config_path}")
     with open(model_config_path, "r") as f:
         model_config = json.load(f)
 
     if not Path(model_safetensors_path).is_file():
-        raise Exception(f"Could not fine model safetensors at {model_safetensors_path}")
+        raise Exception(f"Could not find model safetensors at {model_safetensors_path}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -321,8 +321,7 @@ def main(model_config_path, model_safetensors_path):
 
     train_model(
         model, train_loader, val_loader, optimizer, device,
-        eval_freq=5, eval_iter=5,
-        start_context=format_input(val_data[0]), tokenizer=tokenizer
+        eval_iter=5
     )
 
     for i, entry in tqdm(enumerate(test_data), total=len(test_data)):
