@@ -11,6 +11,7 @@ dependencies = [
     "ipython>=9.8.0",
     "matplotlib>=3.10.7",
     "numpy>=2.3.5",
+    "openai>=2.9.0",
     "safetensors>=0.7.0",
     "tiktoken>=0.12.0",
     "torch>=2.9.1",
