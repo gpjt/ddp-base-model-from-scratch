@@ -36,14 +36,13 @@ class BigTrainDataset(Dataset):
         return self.xs.shape[0]
 
 
-def download_dataset(datasets_dir, dataset_name):
-    download_path = snapshot_download(
+def download_dataset(dataset_dir, dataset_name):
+    snapshot_download(
         f"{dataset_name}",
         repo_type="dataset",
-        local_dir=datasets_dir / dataset_name,
+        local_dir=dataset_dir,
         allow_patterns="*"
     )
-    return Path(download_path)
 
 
 def load_dataset(
@@ -311,13 +310,15 @@ def main(run, datasets_dir_path, checkpoint):
     scaler = torch.amp.GradScaler()
 
     datasets_dir = Path(datasets_dir_path)
+    dataset_name = train_conf["dataset"]
+    dataset_dir = datasets_dir / dataset_name
     if local_rank == 0:
         if not datasets_dir.exists():
             datasets_dir.mkdir()
+        if not datasets_dir.is_dir():
+            raise Exception(f"{datasets_dir_path} is not a directory")
+        download_dataset(dataset_dir, dataset_name)
     dist.barrier()
-    if not datasets_dir.is_dir():
-        raise Exception(f"{datasets_dir_path} is not a directory")
-    dataset_dir = download_dataset(datasets_dir, train_conf["dataset"])
 
     train_ds = load_dataset(
         dataset_dir, "train",
