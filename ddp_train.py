@@ -311,6 +311,8 @@ def main(run, datasets_dir_path, checkpoint):
     scaler = torch.amp.GradScaler()
 
     datasets_dir = Path(datasets_dir_path)
+    if not datasets_dir.exists():
+        datasets_dir.mkdir()
     if not datasets_dir.is_dir():
         raise Exception(f"{datasets_dir_path} is not a directory")
     dataset_dir = download_dataset(datasets_dir, train_conf["dataset"])
