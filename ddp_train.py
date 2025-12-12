@@ -154,7 +154,8 @@ def train(
     model, optimizer, scaler,
     train_ds, val_ds,
     start_global_step, best_loss,
-    validation_interval, validation_batches
+    validation_interval, validation_batches,
+    do_validation=True, max_steps=None,
 ):
     device = next(model.parameters()).device
 
@@ -163,7 +164,10 @@ def train(
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 
-    total_global_steps = len(train_ds) // world_size
+    if max_steps is not None:
+        total_global_steps = max_steps
+    else:
+        total_global_steps = len(train_ds) // world_size
 
     print(f"Starting rank {rank} training at global step {start_global_step}")
     train_losses = []
@@ -204,7 +208,7 @@ def train(
             )
 
 
-        is_eval_iter = (
+        is_eval_iter = do_validation and (
             (global_step % validation_interval == 0)
             or (global_step == total_global_steps - 1)
         )
@@ -255,7 +259,7 @@ def train(
     end_time = time.time()
     elapsed_time = end_time - start_time
 
-    if rank == 0:
+    if do_validation and rank == 0:
         print(f"\n\n\nTraining complete in {elapsed_time:,.3f} seconds")
         total_tokens_seen = tokens_seen_this_rank * world_size
         print(f"Tokens seen: {total_tokens_seen:,.0f}")
@@ -264,11 +268,125 @@ def train(
         print(f"Final val loss: {val_loss:.3f}")
 
 
+def check_batch_size_works(
+    batch_size,
+    run_dir, dataset_dir,
+    model, optimizer, scaler,
+    train_conf, model_conf
+):
+    if dist.get_rank() == 0:
+        print(f"Trying to train with batch size {batch_size}")
+    train_ds = load_dataset(
+        dataset_dir, "train",
+        train_conf["min_train_tokens"], train_conf["start_train_token"],
+        dist.get_world_size(), batch_size,
+        model_conf["context_length"]
+    )
+
+    try:
+        train(
+            run_dir,
+            model, optimizer, scaler,
+            train_ds, val_ds=None,
+            start_global_step=0, best_loss=None,
+            validation_interval=None, validation_batches=None,
+            do_validation=False, max_steps=3
+        )
+        if dist.get_rank() == 0:
+            print(f"Batch size {batch_size} worked OK")
+        return True
+    except RuntimeError as e:
+        if "out of memory" not in str(e):
+            raise
+        torch.cuda.empty_cache()
+        if dist.get_rank() == 0:
+            print(f"Batch size {batch_size} OOMed")
+        return False
+
+
+def binary_chop_batch_sizes(
+    run_dir, dataset_dir,
+    model, optimizer, scaler, local_rank,
+    train_conf, model_conf
+):
+    ddp_model = DDP(model, device_ids=[local_rank])
+
+    def _check_batch_size_works(batch_size):
+        return check_batch_size_works(
+            batch_size, run_dir, dataset_dir,
+            ddp_model, optimizer, scaler,
+            train_conf, model_conf
+        )
+
+    smallest_fail = 70
+    if _check_batch_size_works(smallest_fail):
+        raise Exception(
+            f"Batch size of {smallest_fail} worked!  Nice machine, "
+            "but you're going to have to alter the code."
+        )
+
+    largest_win = 1
+    if not _check_batch_size_works(largest_win):
+        raise Exception(
+            f"Batch size of {largest_win} didn't work :-(.  "
+            "Gonna need a bigger box"
+        )
+
+    while smallest_fail - largest_win > 1:
+        midpoint = largest_win + ((smallest_fail - largest_win) // 2)
+        if _check_batch_size_works(midpoint):
+            largest_win = midpoint
+        else:
+            smallest_fail = midpoint
+
+    return largest_win
+
+
+def load_datasets_and_train(
+    run_dir,
+    model, optimizer, scaler, local_rank,
+    dataset_dir,
+    train_conf, model_conf,
+    checkpoint,
+):
+    train_ds = load_dataset(
+        dataset_dir, "train",
+        train_conf["min_train_tokens"], train_conf["start_train_token"],
+        dist.get_world_size(), train_conf["minibatch_size"],
+        model_conf["context_length"]
+    )
+    val_ds = load_dataset(
+        dataset_dir, "validation",
+        -1, train_conf["start_val_token"],
+        dist.get_world_size(), train_conf["minibatch_size"],
+        model_conf["context_length"]
+    )
+
+    if checkpoint:
+        global_step, best_loss = load_checkpoint(
+            run_dir, checkpoint, model, optimizer, scaler
+        )
+    else:
+        global_step = 0
+        best_loss = None
+
+    ddp_model = DDP(model, device_ids=[local_rank])
+
+    train(
+        run_dir,
+        ddp_model, optimizer, scaler,
+        train_ds, val_ds,
+        global_step, best_loss,
+        train_conf["validation_interval"], train_conf["validation_batches"],
+    )
+
+
 @click.command()
 @click.argument("run")
 @click.argument("datasets_dir_path")
 @click.argument("checkpoint", default=None)
-def main(run, datasets_dir_path, checkpoint):
+@click.option("--find-max-minibatch-size", "-f", is_flag=True)
+def main(run, datasets_dir_path, checkpoint, find_max_minibatch_size):
     run_dir = Path(__file__).resolve().parent / "runs" / run
     if not run_dir.is_dir():
         raise Exception(f"Could not find run dir {run_dir}")
@@ -320,36 +438,22 @@ def main(run, datasets_dir_path, checkpoint):
         download_dataset(dataset_dir, dataset_name)
     dist.barrier()
 
-    train_ds = load_dataset(
-        dataset_dir, "train",
-        train_conf["min_train_tokens"], train_conf["start_train_token"],
-        dist.get_world_size(), train_conf["minibatch_size"],
-        model_conf["context_length"]
-    )
-    val_ds = load_dataset(
-        dataset_dir, "validation",
-        -1, train_conf["start_val_token"],
-        dist.get_world_size(), train_conf["minibatch_size"],
-        model_conf["context_length"]
-    )
-
-    if checkpoint:
-        global_step, best_loss = load_checkpoint(
-            run_dir, checkpoint, model, optimizer, scaler
+    if find_max_minibatch_size:
+        max_minibatch_size = binary_chop_batch_sizes(
+            run_dir, dataset_dir,
+            model, optimizer, scaler, local_rank,
+            train_conf, model_conf
         )
+        if dist.get_rank() == 0:
+            print(f"Max minibatch size was {max_minibatch_size}")
     else:
-        global_step = 0
-        best_loss = None
-
-    ddp_model = DDP(model, device_ids=[local_rank])
-
-    train(
-        run_dir,
-        ddp_model, optimizer, scaler,
-        train_ds, val_ds,
-        global_step, best_loss,
-        train_conf["validation_interval"], train_conf["validation_batches"],
-    )
+        load_datasets_and_train(
+            run_dir,
+            model, optimizer, scaler, local_rank,
+            dataset_dir,
+            train_conf, model_conf,
+            checkpoint,
+        )
 
     dist.destroy_process_group()
 
