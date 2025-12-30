@@ -19,7 +19,9 @@ def main(datasets_dir_path, model_config_path, model_safetensors_path):
     datasets_dir = Path(datasets_dir_path)
     if not datasets_dir.is_dir():
         raise Exception(f"{datasets_dir_path} is not a directory")
-    dataset_dir = download_dataset(datasets_dir, "gpjt/fineweb-gpt2-tokens")
+    dataset = "gpjt/fineweb-gpt2-tokens"
+    dataset_dir = datasets_dir / dataset
+    download_dataset(dataset_dir, dataset)
 
     if not Path(model_config_path).is_file():
         raise Exception(f"Could not fine model config at {model_config_path}")
