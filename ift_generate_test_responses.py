@@ -20,7 +20,6 @@ from tqdm import tqdm
 
 import tiktoken
 import torch
-from openai import OpenAI
 from torch.utils.data import Dataset, DataLoader
 
 from safetensors.torch import load_file
@@ -259,41 +258,11 @@ def generate(
     return idx
 
 
-def query_model(prompt):
-    client = OpenAI()
-
-    response = client.responses.create(
-        model="gpt-5.1",
-        input=prompt
-    )
-
-    return response.output_text
-
-
-def generate_model_scores(json_data):
-    scores = []
-    for entry in tqdm(json_data, desc="Scoring entries"):
-        prompt = (
-            f"Given the input `{format_input(entry)}` "
-            f"and correct output `{entry['output']}`, "
-            f"score the model response `{entry['model_response']}` "
-            f"on a scale of 0 to 100, where 100 is the best score. "
-            f"Respond with the integer number only."
-        )
-        score = query_model(prompt)
-        try:
-            scores.append(int(score))
-        except ValueError:
-            print(f"Could not convert score: {score}")
-            continue
-
-    return scores
-
-
 @click.command()
+@click.argument("name")
 @click.argument("model_config_path")
 @click.argument("model_safetensors_path")
-def main(model_config_path, model_safetensors_path):
+def main(name, model_config_path, model_safetensors_path):
     if not Path(model_config_path).is_file():
         raise Exception(f"Could not find model config at {model_config_path}")
     with open(model_config_path, "r") as f:
@@ -345,24 +314,8 @@ def main(model_config_path, model_safetensors_path):
         )
         test_data[i]["model_response"] = response_text
 
-    for entry in test_data[:3]:
-        prompt = (
-            f"Given the input `{format_input(entry)}` "
-            f"and correct output `{entry['output']}`, "
-            f"score the model response `{entry['model_response']}` "
-            f"on a scale of 0 to 100, where 100 is the best score."
-        )
-        print("\nDataset response:")
-        print(">>", entry["output"])
-        print("\nModel response:")
-        print(">>", entry["model_response"])
-        print("\nScore:")
-        print(">>", query_model(prompt))
-        print("\n-----------------------------------------")
-
-    scores = generate_model_scores(test_data)
-    print(f"Number of scores: {len(scores)} of {len(test_data)}")
-    print(f"Average score: {sum(scores) / len(scores):.2f}\n")
+    with open(Path(__file__).resolve().parent / f"{name}-ift-test-results.json", "w") as f:
+        json.dump(test_data, f)
 
 
 if __name__ == "__main__":
