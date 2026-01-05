@@ -3,6 +3,7 @@ runs/*/big-training-run-chart.png
 runs/*/checkpoints/
 instruction-data.json
 *-ift-test-results.json
+*-ift-test-results-annotated.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

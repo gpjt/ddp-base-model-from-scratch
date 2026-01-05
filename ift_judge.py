@@ -1,5 +1,6 @@
 import json
 import random
+from pathlib import Path
 
 import click
 from tqdm import tqdm
@@ -147,9 +148,14 @@ def main(result_files):
         for jj, result_file in enumerate(result_files_shuffled):
             this_result_file_result = result[f"Model {jj + 1}"]
             final_scores[result_file] += this_result_file_result["score"]
+            ift_results[result_file][ii]["llm_score"] = this_result_file_result["score"]
+            ift_results[result_file][ii]["llm_comments"] = this_result_file_result["comments"]
 
     for result_file in result_files:
         print(f"{result_file}: {final_scores[result_file] / length:.2f}")
+        annotated_file_path = Path(result_file).stem + "-annotated.json"
+        with open(annotated_file_path, "w") as f:
+            json.dump(ift_results[result_file], f)
 
 
 
