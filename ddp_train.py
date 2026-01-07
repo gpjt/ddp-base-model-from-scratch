@@ -25,9 +25,9 @@ from gpt import GPTModel
 
 class BigTrainDataset(Dataset):
 
-    def __init__(self, all_tokens, seq_length, minibatch_size):
-        self.xs = all_tokens[:-1].reshape(-1, minibatch_size, seq_length)
-        self.ys = all_tokens[1:].reshape(-1, minibatch_size, seq_length)
+    def __init__(self, all_tokens, seq_length, microbatch_size):
+        self.xs = all_tokens[:-1].reshape(-1, microbatch_size, seq_length)
+        self.ys = all_tokens[1:].reshape(-1, microbatch_size, seq_length)
 
     def __getitem__(self, ix):
         return (self.xs[ix], self.ys[ix])
@@ -48,14 +48,14 @@ def download_dataset(dataset_dir, dataset_name):
 def load_dataset(
     dataset_dir, split,
     min_tokens, start_token,
-    world_size, minibatch_size,
+    world_size, microbatch_size,
     seq_length
 ):
     full_dataset = load_file(dataset_dir / f"{split}.safetensors")["tokens"]
     if start_token > len(full_dataset):
         raise Exception(f"start_token {start_token} is past the end of the dataset")
 
-    one_full_batch_tokens = world_size * minibatch_size * seq_length
+    one_full_batch_tokens = world_size * microbatch_size * seq_length
 
     if min_tokens == -1:
         available_tokens = len(full_dataset) - start_token
@@ -76,7 +76,7 @@ def load_dataset(
 
     return BigTrainDataset(
         full_dataset[start_token:start_token + tokens_needed],
-        seq_length, minibatch_size,
+        seq_length, microbatch_size,
     )
 
 
@@ -196,8 +196,8 @@ def train(
         scaler.update()
         train_losses.append(train_loss.item())
 
-        minibatch_size, sequence_length = inputs.shape
-        tokens_seen_this_rank += minibatch_size * sequence_length
+        microbatch_size, sequence_length = inputs.shape
+        tokens_seen_this_rank += microbatch_size * sequence_length
 
         if rank == 0:
             elapsed_time = time.time() - start_time
@@ -352,13 +352,13 @@ def load_datasets_and_train(
     train_ds = load_dataset(
         dataset_dir, "train",
         train_conf["min_train_tokens"], train_conf["start_train_token"],
-        dist.get_world_size(), train_conf["minibatch_size"],
+        dist.get_world_size(), train_conf["microbatch_size"],
         model_conf["context_length"]
     )
     val_ds = load_dataset(
         dataset_dir, "validation",
         -1, train_conf["start_val_token"],
-        dist.get_world_size(), train_conf["minibatch_size"],
+        dist.get_world_size(), train_conf["microbatch_size"],
         model_conf["context_length"]
     )
 
@@ -385,8 +385,8 @@ def load_datasets_and_train(
 @click.argument("run")
 @click.argument("datasets_dir_path")
 @click.argument("checkpoint", default=None)
-@click.option("--find-max-minibatch-size", "-f", is_flag=True)
-def main(run, datasets_dir_path, checkpoint, find_max_minibatch_size):
+@click.option("--find-max-microbatch-size", "-f", is_flag=True)
+def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
     run_dir = Path(__file__).resolve().parent / "runs" / run
     if not run_dir.is_dir():
         raise Exception(f"Could not find run dir {run_dir}")
@@ -438,14 +438,14 @@ def main(run, datasets_dir_path, checkpoint, find_max_minibatch_size):
         download_dataset(dataset_dir, dataset_name)
     dist.barrier()
 
-    if find_max_minibatch_size:
-        max_minibatch_size = binary_chop_batch_sizes(
+    if find_max_microbatch_size:
+        max_microbatch_size = binary_chop_batch_sizes(
             run_dir, dataset_dir,
             model, optimizer, scaler, local_rank,
             train_conf, model_conf
         )
         if dist.get_rank() == 0:
-            print(f"Max minibatch size was {max_minibatch_size}")
+            print(f"Max microbatch size was {max_microbatch_size}")
     else:
         load_datasets_and_train(
             run_dir,

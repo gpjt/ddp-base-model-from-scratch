@@ -13,23 +13,23 @@ It’s designed as a small, educational-ish “base model pre-train” pipeline 
 
 ## Contents
 
-- [Features](#features)  
-- [Requirements](#requirements)  
-- [Installation](#installation)  
-- [Dataset options](#dataset-options)  
-  - [Using the published FineWeb tokens](#using-the-published-fineweb-tokens)  
-  - [Rebuilding the token dataset yourself](#rebuilding-the-token-dataset-yourself)  
-- [Configuring a training run](#configuring-a-training-run)  
-  - [`model.json`](#modeljson)  
-  - [`train.json`](#trainjson)  
-- [Running DDP training](#running-ddp-training)  
-  - [Basic example](#basic-example)  
-  - [Resuming from a checkpoint](#resuming-from-a-checkpoint)  
-- [Evaluating and sampling](#evaluating-and-sampling)  
-  - [Quick smoke test generation](#quick-smoke-test-generation)  
-  - [Loss on a validation slice](#loss-on-a-validation-slice)  
-  - [Instruction-following / IF test](#instruction-following--if-test)  
-- [Lambda Labs / cloud notes](#lambda-labs--cloud-notes)  
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Dataset options](#dataset-options)
+  - [Using the published FineWeb tokens](#using-the-published-fineweb-tokens)
+  - [Rebuilding the token dataset yourself](#rebuilding-the-token-dataset-yourself)
+- [Configuring a training run](#configuring-a-training-run)
+  - [`model.json`](#modeljson)
+  - [`train.json`](#trainjson)
+- [Running DDP training](#running-ddp-training)
+  - [Basic example](#basic-example)
+  - [Resuming from a checkpoint](#resuming-from-a-checkpoint)
+- [Evaluating and sampling](#evaluating-and-sampling)
+  - [Quick smoke test generation](#quick-smoke-test-generation)
+  - [Loss on a validation slice](#loss-on-a-validation-slice)
+  - [Instruction-following / IF test](#instruction-following--if-test)
+- [Lambda Labs / cloud notes](#lambda-labs--cloud-notes)
 - [License](#license)
 
 ---
@@ -123,7 +123,7 @@ There are two relevant datasets on Hugging Face:
 - `gpjt/fineweb-gpt2-tokens`
 - `gpjt/fineweb-edu-gpt2-tokens`
 
-These contain GPT-2-tokenised versions of FineWeb / FineWeb-Edu.  
+These contain GPT-2-tokenised versions of FineWeb / FineWeb-Edu.
 The training script will download whichever dataset name you specify in `train.json` (see below) using `huggingface_hub.snapshot_download`.
 
 You’ll pass a **local datasets directory** as an argument at runtime; the script will create subfolders there as needed.
@@ -229,7 +229,7 @@ Fields:
 - `min_train_tokens`: minimum number of tokens to pull for training (`-1` means “use as many as possible from `start_train_token` onwards, in full global batches”)
 - `start_train_token`: starting token index for training (e.g. `0`)
 - `start_val_token`: starting token index for validation (so train/val don’t overlap)
-- `minibatch_size`: per-GPU mini-batch size
+- `microbatch_size`: per-GPU micro-batch size
 - `validation_interval`: how often (in global steps) to run validation & checkpoint
 - `validation_batches`: how many batches to use when computing validation loss
 
@@ -241,7 +241,7 @@ Example:
   "min_train_tokens": -1,
   "start_train_token": 0,
   "start_val_token": 50000000,
-  "minibatch_size": 6,
+  "microbatch_size": 6,
   "validation_interval": 100,
   "validation_batches": 100
 }
@@ -249,7 +249,7 @@ Example:
 
 The code computes how many tokens to pull such that each DDP **global batch** is:
 
-- `world_size * minibatch_size * context_length` tokens
+- `world_size * microbatch_size * context_length` tokens
 
 and it only ever uses a multiple of that, plus **one extra token** for the label shift.
 

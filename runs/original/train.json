@@ -1,5 +1,5 @@
 {
-    "minibatch_size": 6,
+    "microbatch_size": 6,
     "validation_interval": 5922,
     "dataset": "gpjt/fineweb-gpt2-tokens",
     "min_train_tokens": 3260190720,
