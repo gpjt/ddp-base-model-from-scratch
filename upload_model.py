@@ -27,7 +27,14 @@ def main(model_config_path, model_safetensors_path, hf_model_name):
     GPJTGPT2Model.register_for_auto_class("AutoModel")
     GPJTGPT2ModelForCausalLM.register_for_auto_class("AutoModelForCausalLM")
 
-    model = GPJTGPT2ModelForCausalLM(GPJTGPT2Config(model_config))
+    config = GPJTGPT2Config(model_config)
+    config.auto_map = {
+        "AutoConfig": "configuration_gpjtgpt2.GPJTGPT2Config",
+        "AutoModel": "modeling_gpjtgpt2.GPJTGPT2Model",
+        "AutoModelForCausalLM": "modeling_gpjtgpt2.GPJTGPT2ModelForCausalLM",
+    }
+
+    model = GPJTGPT2ModelForCausalLM(config)
     model.model.load_state_dict(load_file(model_safetensors_path))
 
     model.push_to_hub(hf_model_name)
