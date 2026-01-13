@@ -1,5 +1,4 @@
 from transformers import PreTrainedModel
-from transformers.utils import PushToHubMixin
 
 from .configuration_gpjtgpt2 import GPJTGPT2Config
 from .gpt import GPTModel
