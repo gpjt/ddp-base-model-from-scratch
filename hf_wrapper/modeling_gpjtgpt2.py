@@ -1,4 +1,5 @@
 from transformers import PreTrainedModel
+from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutput
 
 from .configuration_gpjtgpt2 import GPJTGPT2Config
@@ -20,7 +21,7 @@ class GPJTGPT2Model(PreTrainedModel):
 
 
 
-class GPJTGPT2ModelForCausalLM(PreTrainedModel):
+class GPJTGPT2ModelForCausalLM(PreTrainedModel, GenerationMixin):
 
     config_class = GPJTGPT2Config
 
