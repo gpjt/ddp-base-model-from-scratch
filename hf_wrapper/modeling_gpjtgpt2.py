@@ -36,3 +36,15 @@ class GPJTGPT2ModelForCausalLM(PreTrainedModel, GenerationMixin):
 
         return CausalLMOutput(logits=logits)
 
+
+    def get_input_embeddings(self):
+        return self.model.tok_emb
+
+
+    def get_output_embeddings(self):
+        return self.model.out_head
+
+
+    def set_output_embeddings(self, new_embeddings):
+        self.model.out_head = new_embeddings
+
