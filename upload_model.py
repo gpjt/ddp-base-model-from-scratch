@@ -33,6 +33,7 @@ def main(model_config_path, model_safetensors_path, hf_model_name):
         "AutoModel": "modeling_gpjtgpt2.GPJTGPT2Model",
         "AutoModelForCausalLM": "modeling_gpjtgpt2.GPJTGPT2ModelForCausalLM",
     }
+    config.architectures = ["GPJTGPT2ModelForCausalLM"]
 
     model = GPJTGPT2ModelForCausalLM(config)
     model.model.load_state_dict(load_file(model_safetensors_path))
