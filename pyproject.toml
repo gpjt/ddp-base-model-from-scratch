@@ -7,13 +7,14 @@ requires-python = ">=3.13"
 dependencies = [
     "click>=8.3.1",
     "datasets>=4.4.1",
-    "huggingface-hub>=1.1.7",
     "ipython>=9.8.0",
     "matplotlib>=3.10.7",
     "numpy>=2.3.5",
     "openai>=2.9.0",
     "safetensors>=0.7.0",
     "tiktoken>=0.12.0",
+    "tokenizers>=0.22.2",
     "torch>=2.9.1",
     "tqdm>=4.67.1",
+    "transformers==4.57.3",
 ]

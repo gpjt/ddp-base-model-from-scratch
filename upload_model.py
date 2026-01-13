@@ -5,7 +5,8 @@ import click
 
 from safetensors.torch import load_file
 
-from hf_model_wrapper import HFGPTModel
+from hf_wrapper.configuration_gpjtgpt2 import GPJTGPT2Config
+from hf_wrapper.modeling_gpjtgpt2 import GPJTGPT2Model
 
 
 @click.command()
@@ -21,8 +22,11 @@ def main(model_config_path, model_safetensors_path, hf_model_name):
     if not Path(model_safetensors_path).is_file():
         raise Exception(f"Could not find model safetensors at {model_safetensors_path}")
 
-    model = HFGPTModel(model_config)
-    model.load_state_dict(load_file(model_safetensors_path))
+    model = GPJTGPT2Model(GPJTGPT2Config(model_config))
+    model.model.load_state_dict(load_file(model_safetensors_path))
+
+    GPJTGPT2Config.register_for_auto_class()
+    GPJTGPT2Model.register_for_auto_class("AutoModel")
 
     model.push_to_hub(hf_model_name)
 
