@@ -3,6 +3,7 @@ from pathlib import Path
 
 import click
 
+from transformers import AutoTokenizer
 from safetensors.torch import load_file
 
 from hf_wrapper.configuration_gpjtgpt2 import GPJTGPT2Config
@@ -29,6 +30,9 @@ def main(model_config_path, model_safetensors_path, hf_model_name):
     GPJTGPT2Model.register_for_auto_class("AutoModel")
 
     model.push_to_hub(hf_model_name)
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
+    tokenizer.push_to_hub(hf_model_name)
 
 
 if __name__ == "__main__":
