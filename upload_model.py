@@ -41,6 +41,7 @@ def main(model_config_path, model_safetensors_path, hf_model_name):
     model.push_to_hub(hf_model_name)
 
     tokenizer = AutoTokenizer.from_pretrained("gpt2", use_fast=True)
+    tokenizer.pad_token = tokenizer.eos_token
     tokenizer.push_to_hub(hf_model_name)
 
 

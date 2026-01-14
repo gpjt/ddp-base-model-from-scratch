@@ -15,3 +15,7 @@ class GPJTGPT2Config(PretrainedConfig):
 
         self.tie_word_embeddings = False
         self.use_cache = False
+        self.bos_token_id = 50256
+        self.eos_token_id = 50256
+        self.pad_token_id = 50256
+
