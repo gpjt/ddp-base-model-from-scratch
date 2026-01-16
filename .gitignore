@@ -1,4 +1,5 @@
 datasets/
+outputs/
 runs/*/big-training-run-chart.png
 runs/*/checkpoints/
 instruction-data.json
