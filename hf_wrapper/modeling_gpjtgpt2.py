@@ -1,3 +1,5 @@
+import torch
+
 from transformers import PreTrainedModel
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutput
@@ -31,10 +33,26 @@ class GPJTGPT2ModelForCausalLM(PreTrainedModel, GenerationMixin):
         self.model = GPTModel(config.cfg)
 
 
-    def forward(self, input_ids, **kwargs):
+    def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
         logits = self.model.forward(input_ids)
 
-        return CausalLMOutput(logits=logits)
+        loss = None
+        if labels is not None:
+            shifted_logits = logits[:, :-1, :]
+            shifted_labels = labels[:, 1:]
+
+            if attention_mask is not None:
+                shifted_mask = attention_mask[:, 1:]
+                shifted_labels = shifted_labels.masked_fill(
+                    shifted_mask == 0, -100
+                )
+
+            loss = torch.nn.functional.cross_entropy(
+                shifted_logits.flatten(0, 1), shifted_labels.flatten(),
+                ignore_index=-100
+            )
+
+        return CausalLMOutput(logits=logits, loss=loss)
 
 
     def get_input_embeddings(self):
