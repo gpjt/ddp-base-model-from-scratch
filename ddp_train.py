@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import time
 from pathlib import Path
 
@@ -413,6 +414,12 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
     # Initialize torch.distributed; set the device ID explicitly
     # to avoid warnings in `dist.barrier`
     dist.init_process_group(backend, device_id=local_rank)
+
+    # Set all of the random seeds
+    seed = 42
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
     model = GPTModel(model_conf).to(local_rank)
 
