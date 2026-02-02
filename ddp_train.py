@@ -104,11 +104,11 @@ def get_training_data(run_dir):
     max_train_losses.sort(key=lambda x: x[0])
     avg_train_losses.sort(key=lambda x: x[0])
 
-    return avg_train_losses, best_global_step
+    return min_train_losses, max_train_losses, avg_train_losses, best_global_step
 
 
 def generate_training_chart(run_dir):
-    avg_train_points, best_global_step = get_training_data(run_dir)
+    min_train_points, max_train_points, avg_train_points, best_global_step = get_training_data(run_dir)
 
     plt.title("TRAINING RUN LOSS")
     plt.xkcd()
@@ -124,7 +124,19 @@ def generate_training_chart(run_dir):
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
 
-    train_epochs, avg_train_losses = zip(*avg_train_points)
+    train_epochs, min_train_losses = zip(*min_train_points)
+    _, max_train_losses = zip(*max_train_points)
+    _, avg_train_losses = zip(*avg_train_points)
+
+    ax.fill_between(
+        train_epochs,
+        min_train_losses,
+        max_train_losses,
+        color="lightblue",
+        alpha=0.25,
+        label="MIN–MAX RANGE",
+    )
+
     ax.plot(train_epochs, avg_train_losses, label="AVG TRAINING LOSS", marker="o")
 
     ax.axvline(
