@@ -110,7 +110,6 @@ def get_training_data(run_dir):
 def generate_training_chart(run_dir):
     min_train_points, max_train_points, avg_train_points, best_global_step = get_training_data(run_dir)
 
-    plt.title("TRAINING RUN LOSS")
     plt.xkcd()
 
     font_family = None
