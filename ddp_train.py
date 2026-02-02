@@ -83,8 +83,9 @@ def load_dataset(
 def get_training_data(run_dir):
     checkpoints_dir = get_checkpoints_dir(run_dir)
 
-    train_losses = []
-    val_losses = []
+    min_train_losses = []
+    max_train_losses = []
+    avg_train_losses = []
     best_global_step = None
     for item in checkpoints_dir.iterdir():
         if item.name == "latest":
@@ -95,17 +96,19 @@ def get_training_data(run_dir):
             best_global_step = meta["global_step"]
             continue
 
-        train_losses.append((meta["global_step"], meta["train_loss"]))
-        val_losses.append((meta["global_step"], meta["val_loss"]))
+        min_train_losses.append((meta["global_step"], meta["min_train_loss"]))
+        max_train_losses.append((meta["global_step"], meta["max_train_loss"]))
+        avg_train_losses.append((meta["global_step"], meta["avg_train_loss"]))
 
-    train_losses.sort(key=lambda x: x[0])
-    val_losses.sort(key=lambda x: x[0])
+    min_train_losses.sort(key=lambda x: x[0])
+    max_train_losses.sort(key=lambda x: x[0])
+    avg_train_losses.sort(key=lambda x: x[0])
 
-    return train_losses, val_losses, best_global_step
+    return avg_train_losses, best_global_step
 
 
 def generate_training_chart(run_dir):
-    train_points, val_points, best_global_step = get_training_data(run_dir)
+    avg_train_points, best_global_step = get_training_data(run_dir)
 
     plt.title("TRAINING RUN LOSS")
     plt.xkcd()
@@ -121,10 +124,8 @@ def generate_training_chart(run_dir):
 
     fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
 
-    train_epochs, train_losses = zip(*train_points)
-    val_epochs, val_losses = zip(*val_points)
-    ax.plot(train_epochs, train_losses, label="TRAINING LOSS", marker="o")
-    ax.plot(val_epochs, val_losses, label="VALIDATION LOSS", marker="s")
+    train_epochs, avg_train_losses = zip(*avg_train_points)
+    ax.plot(train_epochs, avg_train_losses, label="AVG TRAINING LOSS", marker="o")
 
     ax.axvline(
         best_global_step, color="red", linestyle="--", linewidth=1.5,
@@ -152,10 +153,11 @@ def calculate_loss(logits, targets):
 def train(
     run_dir,
     model, optimizer, scaler,
-    train_ds, val_ds,
+    train_ds,
     start_global_step, best_loss,
-    validation_interval, validation_batches,
-    do_validation=True, max_steps=None,
+    checkpoint_interval,
+    do_checkpoints=True,
+    max_steps=None,
 ):
     device = next(model.parameters()).device
 
@@ -208,44 +210,33 @@ def train(
             )
 
 
-        is_eval_iter = do_validation and (
-            (global_step % validation_interval == 0)
+        is_checkpoint_iter = do_checkpoints and (
+            (global_step % checkpoint_interval == 0)
             or (global_step == total_global_steps - 1)
         )
-        if is_eval_iter:
+        if is_checkpoint_iter:
             dist.barrier()
 
             if rank == 0:
-                print("\n\n\nValidation/checkpoint")
-                model.eval()
-
+                print("\n\n\nCheckpoint")
                 base_model = model.module
-                with torch.inference_mode(), torch.amp.autocast(device_type=device.type, dtype=torch.float16):
-                    val_losses = []
-                    for val_ix in tqdm(range(validation_batches)):
-                        val_inputs, val_targets = val_ds[val_ix]
-                        val_inputs = val_inputs.to(device).to(torch.long)
-                        val_targets = val_targets.to(device).to(torch.long)
-                        val_logits = base_model(val_inputs)
-                        val_losses.append(
-                            calculate_loss(val_logits, val_targets).item()
-                        )
-                    val_loss = sum(val_losses) / len(val_losses)
-
-                if best_loss is None or val_loss < best_loss:
-                    is_best = True
-                    best_loss = val_loss
-                else:
-                    is_best = False
-
+            
+                min_train_loss = min(train_losses)
+                max_train_loss = max(train_losses)
                 avg_train_loss = sum(train_losses) / len(train_losses)
                 train_losses = []
+
+                if best_loss is None or avg_train_loss < best_loss:
+                    is_best = True
+                    best_loss = avg_train_loss
+                else:
+                    is_best = False
 
                 save_checkpoint(
                     run_dir,
                     f"iteration-{global_step}",
                     base_model, optimizer, scaler,
-                    avg_train_loss, val_loss,
+                    min_train_loss, max_train_loss, avg_train_loss,
                     global_step,
                     is_best
                 )
@@ -259,13 +250,12 @@ def train(
     end_time = time.time()
     elapsed_time = end_time - start_time
 
-    if do_validation and rank == 0:
+    if do_checkpoints and rank == 0:
         print(f"\n\n\nTraining complete in {elapsed_time:,.3f} seconds")
         total_tokens_seen = tokens_seen_this_rank * world_size
         print(f"Tokens seen: {total_tokens_seen:,.0f}")
         print(f"Throughput: {total_tokens_seen / elapsed_time:,.0f} tokens/second")
         print(f"Final train loss: {avg_train_loss:.3f}")
-        print(f"Final val loss: {val_loss:.3f}")
 
 
 def check_batch_size_works(
@@ -287,10 +277,10 @@ def check_batch_size_works(
         train(
             run_dir,
             model, optimizer, scaler,
-            train_ds, val_ds=None,
+            train_ds,
             start_global_step=0, best_loss=None,
-            validation_interval=None, validation_batches=None,
-            do_validation=False, max_steps=3
+            checkpoint_interval=None,
+            do_checkpoints=False, max_steps=3
         )
         if dist.get_rank() == 0:
             print(f"Batch size {batch_size} worked OK")
@@ -355,12 +345,6 @@ def load_datasets_and_train(
         dist.get_world_size(), train_conf["microbatch_size"],
         model_conf["context_length"]
     )
-    val_ds = load_dataset(
-        dataset_dir, "validation",
-        -1, train_conf["start_val_token"],
-        dist.get_world_size(), train_conf["microbatch_size"],
-        model_conf["context_length"]
-    )
 
     if checkpoint:
         global_step, best_loss = load_checkpoint(
@@ -375,9 +359,10 @@ def load_datasets_and_train(
     train(
         run_dir,
         ddp_model, optimizer, scaler,
-        train_ds, val_ds,
+        train_ds,
         global_step, best_loss,
-        train_conf["validation_interval"], train_conf["validation_batches"],
+        checkpoint_interval=train_conf["checkpoint_interval"],
+        do_checkpoints=True,
     )
 
 
