@@ -378,7 +378,7 @@ def load_datasets_and_train(
     train(
         run_dir,
         ddp_model, optimizer, scaler,
-        train_conf["clipping_max_norm"],
+        train_conf.get("clipping_max_norm"),
         train_ds,
         global_step, best_loss,
         checkpoint_interval=train_conf["checkpoint_interval"],
