@@ -1,6 +1,6 @@
 {
     "microbatch_size": 12,
-    "clipping_max_norm": 1.0,
+    "clipping_max_norm": 3.5,
     "checkpoint_interval": 617,
     "dataset": "gpjt/fineweb-gpt2-tokens",
     "min_train_tokens": 3260190720,
