@@ -84,6 +84,13 @@ def load_dataset(
 def get_training_data(run_dir):
     checkpoints_dir = get_checkpoints_dir(run_dir)
 
+    def sanitize(val, cap=1_000_000):
+        if val == float("inf"):
+            return cap
+        if val == float("-inf"):
+            return -cap
+        return val
+
     min_train_losses = []
     max_train_losses = []
     avg_train_losses = []
@@ -105,9 +112,9 @@ def get_training_data(run_dir):
         avg_train_losses.append((meta["global_step"], meta["avg_train_loss"]))
 
         if meta.get("max_grad_norms") is not None:
-            max_grad_norms.append((meta["global_step"], meta["max_grad_norms"]))
+            max_grad_norms.append((meta["global_step"], sanitize(meta["max_grad_norms"])))
         if meta.get("avg_grad_norms") is not None:
-            avg_grad_norms.append((meta["global_step"], meta["avg_grad_norms"]))
+            avg_grad_norms.append((meta["global_step"], sanitize(meta["avg_grad_norms"])))
         if meta.get("frac_clipped") is not None:
             frac_clipped.append((meta["global_step"], meta["frac_clipped"]))
             
