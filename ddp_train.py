@@ -165,6 +165,7 @@ def calculate_loss(logits, targets):
 def train(
     run_dir,
     model, optimizer, scaler,
+    clipping_max_norm,
     train_ds,
     start_global_step, best_loss,
     checkpoint_interval,
@@ -206,6 +207,11 @@ def train(
             train_loss = calculate_loss(logits, targets)
 
         scaler.scale(train_loss).backward()
+
+        if clipping_max_norm is not None:
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clipping_max_norm)
+
         scaler.step(optimizer)
         scaler.update()
         train_losses.append(train_loss.item())
@@ -289,6 +295,7 @@ def check_batch_size_works(
         train(
             run_dir,
             model, optimizer, scaler,
+            None,
             train_ds,
             start_global_step=0, best_loss=None,
             checkpoint_interval=None,
@@ -371,6 +378,7 @@ def load_datasets_and_train(
     train(
         run_dir,
         ddp_model, optimizer, scaler,
+        train_conf["clipping_max_norm"],
         train_ds,
         global_step, best_loss,
         checkpoint_interval=train_conf["checkpoint_interval"],
