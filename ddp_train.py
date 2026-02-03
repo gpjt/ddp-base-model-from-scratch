@@ -128,8 +128,8 @@ def get_training_data(run_dir):
 
 def generate_training_chart(run_dir):
     (
-        min_train_points, max_train_points, avg_train_points, 
-        max_grad_norms, avg_grad_norms, frac_clipped,
+        min_train_points, max_train_points, avg_train_points,
+        max_grad_points, avg_grad_points, frac_clipped_points,
         best_global_step
     ) = get_training_data(run_dir)
 
@@ -140,42 +140,77 @@ def generate_training_chart(run_dir):
         if "xkcd" in f.name.lower():
             font_family = f.name
             break
-
     if font_family is not None:
         plt.rcParams['font.family'] = font_family
 
-    fig, ax = plt.subplots(figsize=(8, 6), dpi=100)
+    fig, ax_loss = plt.subplots(figsize=(8, 6), dpi=100)
 
-    train_epochs, min_train_losses = zip(*min_train_points)
+    train_steps, min_train_losses = zip(*min_train_points)
     _, max_train_losses = zip(*max_train_points)
     _, avg_train_losses = zip(*avg_train_points)
 
-    ax.fill_between(
-        train_epochs,
+    ax_loss.fill_between(
+        train_steps,
         min_train_losses,
         max_train_losses,
         color="lightblue",
         alpha=0.25,
-        label="MIN–MAX RANGE",
+        label="MIN–MAX LOSS",
+    )
+    ax_loss.plot(
+        train_steps,
+        avg_train_losses,
+        color="blue",
+        label="AVG TRAIN LOSS",
+        marker="o",
+        linestyle="-",
     )
 
-    ax.plot(train_epochs, avg_train_losses, label="AVG TRAINING LOSS", marker="o")
+    ax_loss.set_title("TRAINING RUN: LOSS + GRAD NORM")
+    ax_loss.set_xlabel("GLOBAL STEP")
+    ax_loss.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax_loss.set_ylabel("LOSS")
 
-    ax.axvline(
-        best_global_step, color="red", linestyle="--", linewidth=1.5,
-        label="BEST GLOBAL STEP"
-    )
+    ax_grad = ax_loss.twinx()
+    ax_grad.set_ylabel("GRAD NORM (L2, PRE-CLIP)")
 
-    ax.set_title("TRAINING RUN LOSS")
-    ax.set_xlabel("GLOBAL STEP")
-    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-    ax.set_ylabel("LOSS")
-    ax.legend()
+    if max_grad_points:
+        xs, ys = zip(*max_grad_points)
+        ax_grad.plot(
+            xs, ys,
+            color="green",
+            label="MAX GRAD NORM",
+            marker="x",
+            linestyle="--",
+        )
+    if avg_grad_points:
+        xs, ys = zip(*avg_grad_points)
+        ax_grad.plot(
+            xs, ys,
+            color="lightgreen",
+            label="AVG GRAD NORM",
+            marker="x",
+            linestyle=":",
+        )
+
+    if best_global_step is not None:
+        ax_loss.axvline(
+            best_global_step,
+            color="red",
+            linestyle="--",
+            linewidth=1.5,
+            label="BEST GLOBAL STEP",
+        )
+
+    handles1, labels1 = ax_loss.get_legend_handles_labels()
+    handles2, labels2 = ax_grad.get_legend_handles_labels()
+    ax_loss.legend(handles1 + handles2, labels1 + labels2, loc="best")
 
     fig.tight_layout()
     image_file = run_dir / "big-training-run-chart.png"
     fig.savefig(image_file, bbox_inches="tight")
     plt.close(fig)
+
 
 
 def calculate_loss(logits, targets):
