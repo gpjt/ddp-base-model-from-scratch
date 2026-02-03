@@ -214,18 +214,20 @@ def generate_training_chart(run_dir, clipping_max_norm):
 
     handles1, labels1 = ax_loss.get_legend_handles_labels()
     handles2, labels2 = ax_grad.get_legend_handles_labels()
-    handles = handles1 + handles2
-    labels = labels1 + labels2
 
     fig.legend(
-        handles, labels,
+        handles1 + handles2,
+        labels1 + labels2,
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.02),
+        bbox_to_anchor=(0.0, -0.06, 1.0, 0.1),
         ncol=2,
         frameon=False,
+        handlelength=2.0,
+        columnspacing=2.0,
+        handletextpad=0.6,
     )
 
-    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    fig.tight_layout(rect=(0, 0.12, 1, 1))
     image_file = run_dir / "big-training-run-chart.png"
     fig.savefig(image_file, bbox_inches="tight")
     plt.close(fig)
