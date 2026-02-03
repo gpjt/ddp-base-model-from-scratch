@@ -126,7 +126,7 @@ def get_training_data(run_dir):
     )
         
 
-def generate_training_chart(run_dir):
+def generate_training_chart(run_dir, clipping_max_norm):
     (
         min_train_points, max_train_points, avg_train_points,
         max_grad_points, avg_grad_points, frac_clipped_points,
@@ -161,7 +161,7 @@ def generate_training_chart(run_dir):
         train_steps,
         avg_train_losses,
         color="blue",
-        label="AVG TRAIN LOSS",
+        label="AVG LOSS",
         marker="o",
         linestyle="-",
     )
@@ -179,19 +179,29 @@ def generate_training_chart(run_dir):
         ax_grad.plot(
             xs, ys,
             color="green",
-            label="MAX GRAD NORM",
+            label="GRAD MAX",
             marker="x",
-            linestyle="--",
+            linestyle=":",
         )
     if avg_grad_points:
         xs, ys = zip(*avg_grad_points)
         ax_grad.plot(
             xs, ys,
             color="lightgreen",
-            label="AVG GRAD NORM",
+            label="GRAD AVG",
             marker="x",
             linestyle=":",
         )
+
+    if clipping_max_norm is not None:
+        ax_grad.axhline(
+            clipping_max_norm,
+            color="green",
+            linestyle="--",
+            linewidth=1.0,
+            label=f"GRAD CLIP",
+        )
+        ax_grad.set_ylim(0, clipping_max_norm + 2)
 
     if best_global_step is not None:
         ax_loss.axvline(
@@ -199,14 +209,23 @@ def generate_training_chart(run_dir):
             color="red",
             linestyle="--",
             linewidth=1.5,
-            label="BEST GLOBAL STEP",
+            label="BEST STEP",
         )
 
     handles1, labels1 = ax_loss.get_legend_handles_labels()
     handles2, labels2 = ax_grad.get_legend_handles_labels()
-    ax_loss.legend(handles1 + handles2, labels1 + labels2, loc="best")
+    handles = handles1 + handles2
+    labels = labels1 + labels2
 
-    fig.tight_layout()
+    fig.legend(
+        handles, labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.02),
+        ncol=2,
+        frameon=False,
+    )
+
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     image_file = run_dir / "big-training-run-chart.png"
     fig.savefig(image_file, bbox_inches="tight")
     plt.close(fig)
@@ -331,7 +350,7 @@ def train(
                     global_step,
                     is_best
                 )
-                generate_training_chart(run_dir)
+                generate_training_chart(run_dir, clipping_max_norm)
 
                 model.train()
                 print("\nContinuing training")
