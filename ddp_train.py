@@ -87,6 +87,9 @@ def get_training_data(run_dir):
     min_train_losses = []
     max_train_losses = []
     avg_train_losses = []
+    max_grad_norms = []
+    avg_grad_norms = []
+    frac_clipped = []
     best_global_step = None
     for item in checkpoints_dir.iterdir():
         if item.name == "latest":
@@ -101,15 +104,34 @@ def get_training_data(run_dir):
         max_train_losses.append((meta["global_step"], meta["max_train_loss"]))
         avg_train_losses.append((meta["global_step"], meta["avg_train_loss"]))
 
+        if meta.get("max_grad_norms") is not None:
+            max_grad_norms.append((meta["global_step"], meta["max_grad_norms"]))
+        if meta.get("avg_grad_norms") is not None:
+            avg_grad_norms.append((meta["global_step"], meta["avg_grad_norms"]))
+        if meta.get("frac_clipped") is not None:
+            frac_clipped.append((meta["global_step"], meta["frac_clipped"]))
+            
+
     min_train_losses.sort(key=lambda x: x[0])
     max_train_losses.sort(key=lambda x: x[0])
     avg_train_losses.sort(key=lambda x: x[0])
+    max_grad_norms.sort(key=lambda x: x[0])
+    avg_grad_norms.sort(key=lambda x: x[0])
+    frac_clipped.sort(key=lambda x: x[0])
 
-    return min_train_losses, max_train_losses, avg_train_losses, best_global_step
-
+    return (
+        min_train_losses, max_train_losses, avg_train_losses, 
+        max_grad_norms, avg_grad_norms, frac_clipped,
+        best_global_step
+    )
+        
 
 def generate_training_chart(run_dir):
-    min_train_points, max_train_points, avg_train_points, best_global_step = get_training_data(run_dir)
+    (
+        min_train_points, max_train_points, avg_train_points, 
+        max_grad_norms, avg_grad_norms, frac_clipped,
+        best_global_step
+    ) = get_training_data(run_dir)
 
     plt.xkcd()
 
@@ -186,6 +208,8 @@ def train(
 
     print(f"Starting rank {rank} training at global step {start_global_step}")
     train_losses = []
+    grad_norms = []
+    clipped_steps = []
     start_time = time.time()
     tokens_seen_this_rank = 0
 
@@ -210,7 +234,9 @@ def train(
 
         if clipping_max_norm is not None:
             scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), clipping_max_norm)
+            pre_clip_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), clipping_max_norm).item()
+            grad_norms.append(pre_clip_norm)
+            clipped_steps.append(pre_clip_norm > clipping_max_norm)
 
         scaler.step(optimizer)
         scaler.update()
@@ -250,11 +276,23 @@ def train(
                 else:
                     is_best = False
 
+                if clipping_max_norm is not None:
+                    max_grad_norms = max(grad_norms)
+                    avg_grad_norms = sum(grad_norms) / len(grad_norms)
+                    frac_clipped = sum(b for b in clipped_steps if b) / len(clipped_steps)
+                else:
+                    max_grad_norms = None
+                    avg_grad_norms = None
+                    frac_clipped = None
+                grad_norms = []
+                clipped_steps = []
+
                 save_checkpoint(
                     run_dir,
                     f"iteration-{global_step}",
                     base_model, optimizer, scaler,
                     min_train_loss, max_train_loss, avg_train_loss,
+                    max_grad_norms, avg_grad_norms, frac_clipped,
                     global_step,
                     is_best
                 )

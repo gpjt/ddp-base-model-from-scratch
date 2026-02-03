@@ -36,6 +36,7 @@ def save_checkpoint(
     name,
     model, optimizer, scaler,
     min_train_loss, max_train_loss, avg_train_loss,
+    max_grad_norms, avg_grad_norms, frac_clipped,
     global_step, is_best
 ):
     checkpoints_dir = get_checkpoints_dir(run_dir)
@@ -57,6 +58,9 @@ def save_checkpoint(
                 min_train_loss=min_train_loss, 
                 max_train_loss=max_train_loss,
                 avg_train_loss=avg_train_loss,
+                max_grad_norms=max_grad_norms, 
+                avg_grad_norms=avg_grad_norms, 
+                frac_clipped=frac_clipped,
                 global_step=global_step,
                 is_best=is_best,
             ),
