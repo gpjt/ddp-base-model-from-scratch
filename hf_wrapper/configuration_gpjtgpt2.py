@@ -13,4 +13,5 @@ class GPJTGPT2Config(PretrainedConfig):
 
         super().__init__(**kwargs)
 
+        self.tie_word_embeddings = False
         self.use_cache = False
