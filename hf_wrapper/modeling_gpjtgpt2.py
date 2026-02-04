@@ -16,6 +16,7 @@ class GPJTGPT2Model(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.model = GPTModel(config.cfg)
+        self.post_init()
 
 
     def forward(self, input_ids, **kwargs):
@@ -31,6 +32,7 @@ class GPJTGPT2ModelForCausalLM(PreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.model = GPTModel(config.cfg)
+        self.post_init()
 
 
     def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
