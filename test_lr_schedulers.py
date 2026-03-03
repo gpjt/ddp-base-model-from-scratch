@@ -50,7 +50,7 @@ def main():
     for ii in range(warmup_period + decay_period):
         if ii == 0:
             print("Initial learning rate: ", optimizer.param_groups[0]["lr"])
-        elif warmup_period - 5 < ii < warmup_period + 5:
+        elif warmup_period - 5 < ii < warmup_period + 5 or ii > warmup_period + decay_period - 5:
             print(f"Step {ii} learning rate: ", optimizer.param_groups[0]["lr"])
         lrs.append(optimizer.param_groups[0]["lr"])
         optimizer.step()
