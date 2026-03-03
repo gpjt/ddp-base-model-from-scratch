@@ -61,7 +61,13 @@ def main():
         lrs.append(optimizer.param_groups[0]["lr"])
 
         if ii == 20000:
+            torch.save(optimizer.state_dict(), "/tmp/optimizer.pt")
+            torch.save(scheduler.state_dict(), "/tmp/scheduler.pt")
+
             optimizer, scheduler = create_optimizer_and_schedulers()
+
+            optimizer.load_state_dict(torch.load("/tmp/optimizer.pt"))
+            scheduler.load_state_dict(torch.load("/tmp/scheduler.pt"))
 
         optimizer.step()
         scheduler.step()
