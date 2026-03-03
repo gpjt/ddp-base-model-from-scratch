@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 from matplotlib import font_manager
 import numpy as np
 
+
+
 def main():
     plt.xkcd()
     font_family = None
@@ -25,26 +27,30 @@ def main():
         nn.Sigmoid()
     )
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=peak_lr, weight_decay=0.1
-    )
-    warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
-        optimizer,
-        start_factor=0.00001,
-        end_factor=1.0,
-        total_iters=warmup_period
-    )
-    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer,
-        T_max=decay_period,
-        eta_min=peak_lr / 10
-    )
-    scheduler = torch.optim.lr_scheduler.SequentialLR(
-        optimizer,
-        schedulers=[warmup_scheduler, cosine_scheduler],
-        milestones=[warmup_period],
-    )
+    def create_optimizer_and_schedulers():
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            lr=peak_lr, weight_decay=0.1
+        )
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer,
+            start_factor=0.00001,
+            end_factor=1.0,
+            total_iters=warmup_period
+        )
+        cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=decay_period,
+            eta_min=peak_lr / 10
+        )
+        scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_period],
+        )
+        return optimizer, scheduler
+
+    optimizer, scheduler = create_optimizer_and_schedulers()
 
     lrs = []
     for ii in range(warmup_period + decay_period):
@@ -53,6 +59,10 @@ def main():
         elif warmup_period - 5 < ii < warmup_period + 5 or ii > warmup_period + decay_period - 5:
             print(f"Step {ii} learning rate: ", optimizer.param_groups[0]["lr"])
         lrs.append(optimizer.param_groups[0]["lr"])
+
+        if ii == 20000:
+            optimizer, scheduler = create_optimizer_and_schedulers()
+
         optimizer.step()
         scheduler.step()
 
