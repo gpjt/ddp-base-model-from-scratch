@@ -10,7 +10,7 @@ def get_checkpoints_dir(run_dir):
     return run_dir / "checkpoints"
 
 
-def load_checkpoint(run_dir, checkpoint, model, optimizer=None, scaler=None):
+def load_checkpoint(run_dir, checkpoint, model, optimizer=None, scaler=None, scheduler=None):
     checkpoints_dir = get_checkpoints_dir(run_dir)
     checkpoint_dir = checkpoints_dir / checkpoint
     model.load_state_dict(load_file(checkpoint_dir / "model.safetensors"))
@@ -20,6 +20,9 @@ def load_checkpoint(run_dir, checkpoint, model, optimizer=None, scaler=None):
 
     if scaler:
         scaler.load_state_dict(torch.load(checkpoint_dir / "scaler.pt"))
+
+    if scheduler:
+        scheduler.load_state_dict(torch.load(checkpoint_dir / "scheduler.pt"))
 
     with open(checkpoint_dir / "meta.json", "r") as f:
         meta = json.load(f)
@@ -34,7 +37,7 @@ def load_checkpoint(run_dir, checkpoint, model, optimizer=None, scaler=None):
 def save_checkpoint(
     run_dir,
     name,
-    model, optimizer, scaler,
+    model, optimizer, scaler, scheduler,
     min_train_loss, max_train_loss, avg_train_loss,
     max_grad_norms, avg_grad_norms, frac_clipped,
     global_step, is_best
@@ -51,6 +54,8 @@ def save_checkpoint(
     save_file(model.state_dict(), checkpoint_dir / "model.safetensors")
     torch.save(optimizer.state_dict(), checkpoint_dir / "optimizer.pt")
     torch.save(scaler.state_dict(), checkpoint_dir / "scaler.pt")
+    if scheduler is not None:
+        torch.save(scheduler.state_dict(), checkpoint_dir / "scheduler.pt")
 
     with open(checkpoint_dir / "meta.json", "w") as f:
         json.dump(

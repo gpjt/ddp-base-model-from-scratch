@@ -206,7 +206,7 @@ def generate_training_chart(run_dir, clipping_max_norm):
             color="green",
             linestyle="--",
             linewidth=1.0,
-            label=f"GRAD CLIP",
+            label="GRAD CLIP",
         )
         ax_grad.set_ylim(0, clipping_max_norm + 2)
 
@@ -249,7 +249,7 @@ def calculate_loss(logits, targets):
 
 def train(
     run_dir,
-    model, optimizer, scaler,
+    model, optimizer, scaler, scheduler,
     clipping_max_norm,
     train_ds,
     start_global_step, best_loss,
@@ -303,6 +303,10 @@ def train(
 
         scaler.step(optimizer)
         scaler.update()
+
+        if scheduler is not None:
+            scheduler.step()
+        
         train_losses.append(train_loss.item())
 
         microbatch_size, sequence_length = inputs.shape
@@ -353,7 +357,7 @@ def train(
                 save_checkpoint(
                     run_dir,
                     f"iteration-{global_step}",
-                    base_model, optimizer, scaler,
+                    base_model, optimizer, scaler, scheduler,
                     min_train_loss, max_train_loss, avg_train_loss,
                     max_grad_norms, avg_grad_norms, frac_clipped,
                     global_step,
@@ -395,7 +399,7 @@ def check_batch_size_works(
     try:
         train(
             run_dir,
-            model, optimizer, scaler,
+            model, optimizer, scaler, None,
             None,
             train_ds,
             start_global_step=0, best_loss=None,
@@ -457,18 +461,41 @@ def load_datasets_and_train(
     model, optimizer, scaler, local_rank,
     dataset_dir,
     train_conf, model_conf,
-    checkpoint,
+    checkpoint, learning_rate,
 ):
+    world_size = dist.get_world_size()
     train_ds = load_dataset(
         dataset_dir, "train",
         train_conf["min_train_tokens"], train_conf["start_train_token"],
-        dist.get_world_size(), train_conf["microbatch_size"],
+        world_size, train_conf["microbatch_size"],
         model_conf["context_length"]
     )
 
+    scheduler = None
+    if train_conf.get("schedule_learning_rate", False):
+        total_steps = len(train_ds) // world_size
+        warmup_steps = (total_steps * train_conf.get("warmup_period_percent", 0)) // 100
+        decay_steps = total_steps - warmup_steps
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer,
+            start_factor=0.00001,
+            end_factor=1.0,
+            total_iters=warmup_steps
+        )
+        cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=decay_steps,
+            eta_min=learning_rate / 10
+        )
+        scheduler = torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_steps],
+        )
+
     if checkpoint:
         global_step, best_loss = load_checkpoint(
-            run_dir, checkpoint, model, optimizer, scaler
+            run_dir, checkpoint, model, optimizer, scaler, scheduler
         )
     else:
         global_step = 0
@@ -478,7 +505,7 @@ def load_datasets_and_train(
 
     train(
         run_dir,
-        ddp_model, optimizer, scaler,
+        ddp_model, optimizer, scaler, scheduler,
         train_conf.get("clipping_max_norm"),
         train_ds,
         global_step, best_loss,
@@ -532,9 +559,10 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
 
     model = GPTModel(model_conf).to(local_rank)
 
+    learning_rate = train_conf.get("learning_rate", 0.0004)
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=0.0004, weight_decay=0.1
+        lr=learning_rate, weight_decay=0.1
     )
 
     scaler = torch.amp.GradScaler()
@@ -565,6 +593,7 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
             dataset_dir,
             train_conf, model_conf,
             checkpoint,
+            learning_rate,
         )
 
     dist.destroy_process_group()
