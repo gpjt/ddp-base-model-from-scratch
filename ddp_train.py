@@ -155,7 +155,7 @@ def generate_training_charts(run_dir, clipping_max_norm):
     if font_family is not None:
         plt.rcParams['font.family'] = font_family
 
-    # --- Chart 1: Loss + Grad Norm ---
+    # --- Chart 1: Loss ---
 
     fig, ax_loss = plt.subplots(figsize=(8, 6), dpi=100)
 
@@ -180,42 +180,10 @@ def generate_training_charts(run_dir, clipping_max_norm):
         linestyle="-",
     )
 
-    ax_loss.set_title("TRAINING RUN: LOSS + GRAD NORM")
+    ax_loss.set_title("TRAINING RUN: LOSS")
     ax_loss.set_xlabel("GLOBAL STEP")
     ax_loss.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax_loss.set_ylabel("LOSS")
-
-    ax_grad = ax_loss.twinx()
-    ax_grad.set_ylabel("GRAD NORM (L2, PRE-CLIP)")
-
-    if max_grad_points:
-        xs, ys = zip(*max_grad_points)
-        ax_grad.plot(
-            xs, ys,
-            color="green",
-            label="GRAD MAX",
-            marker="x",
-            linestyle=":",
-        )
-    if avg_grad_points:
-        xs, ys = zip(*avg_grad_points)
-        ax_grad.plot(
-            xs, ys,
-            color="lightgreen",
-            label="GRAD AVG",
-            marker="x",
-            linestyle=":",
-        )
-
-    if clipping_max_norm is not None:
-        ax_grad.axhline(
-            clipping_max_norm,
-            color="green",
-            linestyle="--",
-            linewidth=1.0,
-            label="GRAD CLIP",
-        )
-        ax_grad.set_ylim(0, clipping_max_norm + 2)
 
     if best_global_step is not None:
         ax_loss.axvline(
@@ -226,18 +194,71 @@ def generate_training_charts(run_dir, clipping_max_norm):
             label="BEST STEP",
         )
 
-    handles1, labels1 = ax_loss.get_legend_handles_labels()
-    handles2, labels2 = ax_grad.get_legend_handles_labels()
+    ax_loss.legend(
+        loc="upper right",
+        handlelength=2.0,
+        handletextpad=0.6,
+    )
 
     fig.tight_layout(rect=(0, 0.12, 1, 1))
-    image_file = run_dir / "main-training-run-chart.png"
+    image_file = run_dir / "loss-chart.png"
     fig.savefig(image_file, bbox_inches="tight")
     plt.close(fig)
 
-    # --- Chart 2: Learning Rate ---
+    # --- Chart 2: Grad Norm ---
+
+    if max_grad_points or avg_grad_points:
+        fig_grad, ax_grad = plt.subplots(figsize=(8, 6), dpi=100)
+
+        if max_grad_points:
+            xs, ys = zip(*max_grad_points)
+            ax_grad.plot(
+                xs, ys,
+                color="green",
+                label="GRAD MAX",
+                marker="x",
+                linestyle=":",
+            )
+        if avg_grad_points:
+            xs, ys = zip(*avg_grad_points)
+            ax_grad.plot(
+                xs, ys,
+                color="lightgreen",
+                label="GRAD AVG",
+                marker="x",
+                linestyle=":",
+            )
+
+        if clipping_max_norm is not None:
+            ax_grad.axhline(
+                clipping_max_norm,
+                color="green",
+                linestyle="--",
+                linewidth=1.0,
+                label="GRAD CLIP",
+            )
+            ax_grad.set_ylim(0, clipping_max_norm + 2)
+
+        ax_grad.set_title("TRAINING RUN: GRAD NORM")
+        ax_grad.set_xlabel("GLOBAL STEP")
+        ax_grad.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax_grad.set_ylabel("GRAD NORM (L2, PRE-CLIP)")
+
+        ax_grad.legend(
+            loc="upper right",
+            handlelength=2.0,
+            handletextpad=0.6,
+        )
+
+        fig_grad.tight_layout(rect=(0, 0.15, 1, 1))
+        grad_image_file = run_dir / "grad-norm-chart.png"
+        fig_grad.savefig(grad_image_file, bbox_inches="tight")
+        plt.close(fig_grad)
+
+    # --- Chart 3: Learning Rate ---
 
     if learning_rates:
-        fig_lr, ax_lr = plt.subplots(figsize=(8, 4), dpi=100)
+        fig_lr, ax_lr = plt.subplots(figsize=(8, 6), dpi=100)
 
         lr_steps, lr_values = zip(*learning_rates)
 
@@ -245,7 +266,6 @@ def generate_training_charts(run_dir, clipping_max_norm):
             lr_steps,
             lr_values,
             color="purple",
-            label="LEARNING RATE",
             marker="o",
             linestyle="-",
         )
