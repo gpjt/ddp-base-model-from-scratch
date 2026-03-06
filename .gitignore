@@ -2,6 +2,8 @@ throwaway-charts/
 datasets/
 outputs/
 runs/*/big-training-run-chart.png
+runs/*/main-training-run-chart.png
+runs/*/learning-rate-chart.png
 runs/*/checkpoints/
 instruction-data.json
 *-ift-test-results.json

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Training Run</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { height: 100%; margin: 0; background: #111; color: #eee; }
+    .wrap {
+      min-height: 100%; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 0.5rem; padding: 1rem 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    img { max-width: 95vw; max-height: 60vh; object-fit: contain; }
+    .meta { opacity: 0.7; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <img id="preview-loss" src="./main-training-run-chart.png" alt="Training run — loss + grad norm" />
+    <img id="preview-lr" src="./learning-rate-chart.png" alt="Training run — learning rate" />
+    <div class="meta">
+      Autorefreshing every 1s — <span id="status">waiting…</span>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const images = [
+        { el: document.getElementById("preview-loss"), base: "./main-training-run-chart.png" },
+        { el: document.getElementById("preview-lr"),   base: "./learning-rate-chart.png" },
+      ];
+      const status = document.getElementById("status");
+
+      function refresh() {
+        const t = Date.now();
+        status.textContent = new Date(t).toLocaleTimeString();
+        for (const { el, base } of images) {
+          const next = `${base}?_ts=${t}`;
+          const tmp = new Image();
+          tmp.onload = () => { el.src = next; };
+          tmp.onerror = () => {};
+          tmp.src = next;
+        }
+      }
+
+      refresh();
+      setInterval(refresh, 1000);
+    })();
+  </script>
+</body>
+</html>

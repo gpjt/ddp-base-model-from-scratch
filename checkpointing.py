@@ -38,6 +38,7 @@ def save_checkpoint(
     run_dir,
     name,
     model, optimizer, scaler, scheduler,
+    learning_rate,
     min_train_loss, max_train_loss, avg_train_loss,
     max_grad_norms, avg_grad_norms, frac_clipped,
     global_step, is_best
@@ -60,6 +61,7 @@ def save_checkpoint(
     with open(checkpoint_dir / "meta.json", "w") as f:
         json.dump(
             dict(
+                learning_rate=learning_rate,
                 min_train_loss=min_train_loss, 
                 max_train_loss=max_train_loss,
                 avg_train_loss=avg_train_loss,
@@ -69,7 +71,8 @@ def save_checkpoint(
                 global_step=global_step,
                 is_best=is_best,
             ),
-            f
+            f,
+            indent=2,
         )
 
     symlink_target = Path(".") / checkpoint_dir.name

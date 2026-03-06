@@ -4,5 +4,8 @@
     "dataset": "gpjt/fineweb-gpt2-tokens",
     "min_train_tokens": 326010,
     "start_train_token": 0,
-    "start_val_token": 0
+    "start_val_token": 0,
+    "learning_rate": 0.0014,
+    "schedule_learning_rate": true,
+    "warmup_period_percent": 5
 }

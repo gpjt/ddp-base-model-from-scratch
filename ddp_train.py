@@ -91,6 +91,7 @@ def get_training_data(run_dir):
             return -cap
         return val
 
+    learning_rates = []
     min_train_losses = []
     max_train_losses = []
     avg_train_losses = []
@@ -107,6 +108,8 @@ def get_training_data(run_dir):
             best_global_step = meta["global_step"]
             continue
 
+        if meta.get("learning_rate"):
+            learning_rates.append((meta["global_step"], meta["learning_rate"]))
         min_train_losses.append((meta["global_step"], meta["min_train_loss"]))
         max_train_losses.append((meta["global_step"], meta["max_train_loss"]))
         avg_train_losses.append((meta["global_step"], meta["avg_train_loss"]))
@@ -118,7 +121,7 @@ def get_training_data(run_dir):
         if meta.get("frac_clipped") is not None:
             frac_clipped.append((meta["global_step"], meta["frac_clipped"]))
             
-
+    learning_rates.sort(key=lambda x: x[0])
     min_train_losses.sort(key=lambda x: x[0])
     max_train_losses.sort(key=lambda x: x[0])
     avg_train_losses.sort(key=lambda x: x[0])
@@ -127,14 +130,16 @@ def get_training_data(run_dir):
     frac_clipped.sort(key=lambda x: x[0])
 
     return (
+        learning_rates,
         min_train_losses, max_train_losses, avg_train_losses, 
         max_grad_norms, avg_grad_norms, frac_clipped,
         best_global_step
     )
         
 
-def generate_training_chart(run_dir, clipping_max_norm):
+def generate_training_charts(run_dir, clipping_max_norm):
     (
+        learning_rates,
         min_train_points, max_train_points, avg_train_points,
         max_grad_points, avg_grad_points, frac_clipped_points,
         best_global_step
@@ -149,6 +154,8 @@ def generate_training_chart(run_dir, clipping_max_norm):
             break
     if font_family is not None:
         plt.rcParams['font.family'] = font_family
+
+    # --- Chart 1: Loss + Grad Norm ---
 
     fig, ax_loss = plt.subplots(figsize=(8, 6), dpi=100)
 
@@ -222,23 +229,36 @@ def generate_training_chart(run_dir, clipping_max_norm):
     handles1, labels1 = ax_loss.get_legend_handles_labels()
     handles2, labels2 = ax_grad.get_legend_handles_labels()
 
-    fig.legend(
-        handles1 + handles2,
-        labels1 + labels2,
-        loc="lower center",
-        bbox_to_anchor=(0.0, -0.06, 1.0, 0.1),
-        ncol=2,
-        frameon=False,
-        handlelength=2.0,
-        columnspacing=2.0,
-        handletextpad=0.6,
-    )
-
     fig.tight_layout(rect=(0, 0.12, 1, 1))
-    image_file = run_dir / "big-training-run-chart.png"
+    image_file = run_dir / "main-training-run-chart.png"
     fig.savefig(image_file, bbox_inches="tight")
     plt.close(fig)
 
+    # --- Chart 2: Learning Rate ---
+
+    if learning_rates:
+        fig_lr, ax_lr = plt.subplots(figsize=(8, 4), dpi=100)
+
+        lr_steps, lr_values = zip(*learning_rates)
+
+        ax_lr.plot(
+            lr_steps,
+            lr_values,
+            color="purple",
+            label="LEARNING RATE",
+            marker="o",
+            linestyle="-",
+        )
+
+        ax_lr.set_title("TRAINING RUN: LEARNING RATE")
+        ax_lr.set_xlabel("GLOBAL STEP")
+        ax_lr.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax_lr.set_ylabel("LEARNING RATE")
+
+        fig_lr.tight_layout(rect=(0, 0.15, 1, 1))
+        lr_image_file = run_dir / "learning-rate-chart.png"
+        fig_lr.savefig(lr_image_file, bbox_inches="tight")
+        plt.close(fig_lr)
 
 
 def calculate_loss(logits, targets):
@@ -358,12 +378,13 @@ def train(
                     run_dir,
                     f"iteration-{global_step}",
                     base_model, optimizer, scaler, scheduler,
+                    optimizer.param_groups[0]["lr"],
                     min_train_loss, max_train_loss, avg_train_loss,
                     max_grad_norms, avg_grad_norms, frac_clipped,
                     global_step,
                     is_best
                 )
-                generate_training_chart(run_dir, clipping_max_norm)
+                generate_training_charts(run_dir, clipping_max_norm)
 
                 model.train()
                 print("\nContinuing training")
