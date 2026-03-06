@@ -108,7 +108,7 @@ def get_training_data(run_dir):
             best_global_step = meta["global_step"]
             continue
 
-        if meta.get("learning_rate"):
+        if meta.get("learning_rate") is not None:
             learning_rates.append((meta["global_step"], meta["learning_rate"]))
         min_train_losses.append((meta["global_step"], meta["min_train_loss"]))
         max_train_losses.append((meta["global_step"], meta["max_train_loss"]))
@@ -324,6 +324,7 @@ def train(
         scaler.step(optimizer)
         scaler.update()
 
+        current_learning_rate = optimizer.param_groups[0]["lr"]
         if scheduler is not None:
             scheduler.step()
         
@@ -378,7 +379,7 @@ def train(
                     run_dir,
                     f"iteration-{global_step}",
                     base_model, optimizer, scaler, scheduler,
-                    optimizer.param_groups[0]["lr"],
+                    current_learning_rate,
                     min_train_loss, max_train_loss, avg_train_loss,
                     max_grad_norms, avg_grad_norms, frac_clipped,
                     global_step,
