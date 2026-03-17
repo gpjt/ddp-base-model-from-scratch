@@ -120,7 +120,7 @@ def get_training_data(run_dir):
             avg_grad_norms.append((meta["global_step"], sanitize(meta["avg_grad_norms"])))
         if meta.get("frac_clipped") is not None:
             frac_clipped.append((meta["global_step"], meta["frac_clipped"]))
-            
+
     learning_rates.sort(key=lambda x: x[0])
     min_train_losses.sort(key=lambda x: x[0])
     max_train_losses.sort(key=lambda x: x[0])
@@ -131,11 +131,11 @@ def get_training_data(run_dir):
 
     return (
         learning_rates,
-        min_train_losses, max_train_losses, avg_train_losses, 
+        min_train_losses, max_train_losses, avg_train_losses,
         max_grad_norms, avg_grad_norms, frac_clipped,
         best_global_step
     )
-        
+
 
 def generate_training_charts(run_dir, clipping_max_norm):
     (
@@ -347,7 +347,7 @@ def train(
         current_learning_rate = optimizer.param_groups[0]["lr"]
         if scheduler is not None:
             scheduler.step()
-        
+
         train_losses.append(train_loss.item())
 
         microbatch_size, sequence_length = inputs.shape
@@ -372,7 +372,7 @@ def train(
             if rank == 0:
                 print("\n\n\nCheckpoint")
                 base_model = model.module
-            
+
                 min_train_loss = min(train_losses)
                 max_train_loss = max(train_losses)
                 avg_train_loss = sum(train_losses) / len(train_losses)
@@ -602,9 +602,10 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
     model = GPTModel(model_conf).to(local_rank)
 
     learning_rate = train_conf.get("learning_rate", 0.0004)
+    weight_decay = train_conf.get("weight_decay", 0.1)
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=learning_rate, weight_decay=0.1
+        lr=learning_rate, weight_decay=weight_decay
     )
 
     scaler = torch.amp.GradScaler()
