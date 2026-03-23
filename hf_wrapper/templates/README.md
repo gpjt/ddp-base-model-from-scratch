@@ -84,4 +84,5 @@ number of tokens.  It's [both dumb and ignorant](https://www.gilesthomas.com/202
 - **Micro-batch size:** {{ train_config['microbatch_size'] }}
 - **Global batch size:** TODO
 - **Dropout:** {{ model_config['drop_rate'] }}
+- **Weight decay:** {{ train_config.get('weight_decay', 0.1) }}
 
