@@ -2,7 +2,7 @@ import datetime
 import json
 from pathlib import Path
 
-from safetensors.torch import load_file, save_file
+from safetensors.torch import load_model, save_model
 import torch
 
 
@@ -13,7 +13,7 @@ def get_checkpoints_dir(run_dir):
 def load_checkpoint(run_dir, checkpoint, model, optimizer=None, scaler=None, scheduler=None):
     checkpoints_dir = get_checkpoints_dir(run_dir)
     checkpoint_dir = checkpoints_dir / checkpoint
-    model.load_state_dict(load_file(checkpoint_dir / "model.safetensors"))
+    load_model(model, checkpoint_dir / "model.safetensors")
 
     if optimizer:
         optimizer.load_state_dict(torch.load(checkpoint_dir / "optimizer.pt"))
@@ -52,7 +52,7 @@ def save_checkpoint(
     checkpoint_dir = checkpoints_dir / checkpoint_name
     checkpoint_dir.mkdir()
 
-    save_file(model.state_dict(), checkpoint_dir / "model.safetensors")
+    save_model(model, checkpoint_dir / "model.safetensors")
     torch.save(optimizer.state_dict(), checkpoint_dir / "optimizer.pt")
     torch.save(scaler.state_dict(), checkpoint_dir / "scaler.pt")
     if scheduler is not None:
@@ -62,11 +62,11 @@ def save_checkpoint(
         json.dump(
             dict(
                 learning_rate=learning_rate,
-                min_train_loss=min_train_loss, 
+                min_train_loss=min_train_loss,
                 max_train_loss=max_train_loss,
                 avg_train_loss=avg_train_loss,
-                max_grad_norms=max_grad_norms, 
-                avg_grad_norms=avg_grad_norms, 
+                max_grad_norms=max_grad_norms,
+                avg_grad_norms=avg_grad_norms,
                 frac_clipped=frac_clipped,
                 global_step=global_step,
                 is_best=is_best,
