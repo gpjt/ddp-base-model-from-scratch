@@ -28,7 +28,7 @@ the GPT-2-style architecture from [Sebastian Raschka](https://sebastianraschka.c
 - **MHA heads:** {{ model_config['n_heads'] }}
 - **Layers:** {{ model_config['n_layers'] }}
 - **QKV bias:** {{ model_config['qkv_bias'] }}
-- **Weight tying:** No.
+- **Weight tying:** {{ model_config.get('tie_weights', False) }}
 
 Don't have high expectations for the model!  It has only 163M parameters (the GPT-2 "small" size)
 and was trained on roughly the Chinchilla-optimal number of tokens (~20x the number of parameters), which means that it doesn't know
