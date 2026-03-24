@@ -1,0 +1,8 @@
+{
+    "microbatch_size": 12,
+    "checkpoint_interval": 617,
+    "dataset": "gpjt/fineweb-gpt2-tokens",
+    "min_train_tokens": 3260190720,
+    "start_train_token": 0,
+    "start_val_token": 0
+}
