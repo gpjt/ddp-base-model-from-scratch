@@ -169,6 +169,8 @@ class GPTModel(nn.Module):
         self.out_head = nn.Linear(
             cfg["emb_dim"], cfg["vocab_size"], bias=False
         )
+        if cfg.get("tie_weights", False):
+            self.out_head.weight = self.tok_emb.weight
 
 
     def forward(self, in_idx):
