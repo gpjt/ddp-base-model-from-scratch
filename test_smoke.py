@@ -7,7 +7,7 @@ import click
 import tiktoken
 import torch
 
-from safetensors.torch import load_file
+from safetensors.torch import load_model
 from gpt import GPTModel
 
 
@@ -26,7 +26,7 @@ def main(model_config_path, model_safetensors_path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = GPTModel(model_config)
-    model.load_state_dict(load_file(model_safetensors_path))
+    load_model(model, model_safetensors_path)
     model.to(device)
     model.eval()
 

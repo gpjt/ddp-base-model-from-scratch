@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 import torch
 
-from safetensors.torch import load_file
+from safetensors.torch import load_model
 from ddp_train import calculate_loss, download_dataset, load_dataset
 from gpt import GPTModel
 
@@ -34,7 +34,7 @@ def main(datasets_dir_path, model_config_path, model_safetensors_path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = GPTModel(model_config)
-    model.load_state_dict(load_file(model_safetensors_path))
+    load_model(model, model_safetensors_path)
     model.to(device)
 
     world_size = 1

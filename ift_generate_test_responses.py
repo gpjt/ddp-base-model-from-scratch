@@ -22,7 +22,7 @@ import tiktoken
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-from safetensors.torch import load_file
+from safetensors.torch import load_model
 from ddp_train import calculate_loss
 from gpt import GPTModel
 
@@ -274,7 +274,7 @@ def main(name, model_config_path, model_safetensors_path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = GPTModel(model_config)
-    model.load_state_dict(load_file(model_safetensors_path))
+    load_model(model, model_safetensors_path)
     model.to(device)
 
     train_data, val_data, test_data = get_data_splits()
