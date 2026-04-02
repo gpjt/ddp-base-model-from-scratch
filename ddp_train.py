@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import random
 import time
@@ -294,12 +295,14 @@ def train(
     train_ds,
     start_global_step, best_loss,
     checkpoint_interval,
+    use_amp,
     do_checkpoints=True,
     max_steps=None,
 ):
     device = next(model.parameters()).device
 
-    torch.set_float32_matmul_precision("high")
+    if use_amp:
+        torch.set_float32_matmul_precision("high")
 
     rank = dist.get_rank()
     world_size = dist.get_world_size()
@@ -308,6 +311,9 @@ def train(
         total_global_steps = max_steps
     else:
         total_global_steps = len(train_ds) // world_size
+
+    if scaler is None and clipping_max_norm is None:
+        clipping_max_norm = math.inf
 
     print(f"Starting rank {rank} training at global step {start_global_step}")
     train_losses = []
@@ -328,21 +334,43 @@ def train(
 
         optimizer.zero_grad(set_to_none=True)
 
-        with torch.amp.autocast(device_type=device.type, dtype=torch.float16):
+        if use_amp:
+            with torch.amp.autocast(device_type=device.type, dtype=torch.float16):
+                logits = model(inputs)
+                train_loss = calculate_loss(logits, targets)
+        else:
             logits = model(inputs)
-
             train_loss = calculate_loss(logits, targets)
 
-        scaler.scale(train_loss).backward()
 
-        if clipping_max_norm is not None:
-            scaler.unscale_(optimizer)
-            pre_clip_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), clipping_max_norm).item()
-            grad_norms.append(pre_clip_norm)
-            clipped_steps.append(pre_clip_norm > clipping_max_norm)
+        if scaler is not None:
+            scaler.scale(train_loss).backward()
+        else:
+            train_loss.backward()
 
-        scaler.step(optimizer)
-        scaler.update()
+        try:
+            if clipping_max_norm is not None:
+                if scaler:
+                    scaler.unscale_(optimizer)
+                pre_clip_norm = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(),
+                    clipping_max_norm,
+                    error_if_nonfinite=scaler is None
+                ).item()
+                grad_norms.append(pre_clip_norm)
+                clipped_steps.append(pre_clip_norm > clipping_max_norm)
+
+            if scaler is not None:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
+
+        except RuntimeError as ex:
+            if "gradients from `parameters` is non-finite" in str(ex):
+                print("Skipping non-finite gradients")
+            else:
+                raise
 
         current_learning_rate = optimizer.param_groups[0]["lr"]
         if scheduler is not None:
@@ -446,6 +474,7 @@ def check_batch_size_works(
             train_ds,
             start_global_step=0, best_loss=None,
             checkpoint_interval=None,
+            use_amp=train_conf.get("use_amp", True),
             do_checkpoints=False, max_steps=3
         )
         if dist.get_rank() == 0:
@@ -552,6 +581,7 @@ def load_datasets_and_train(
         train_ds,
         global_step, best_loss,
         checkpoint_interval=train_conf["checkpoint_interval"],
+        use_amp=train_conf.get("use_amp", True),
         do_checkpoints=True,
     )
 
@@ -608,7 +638,10 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
         lr=learning_rate, weight_decay=weight_decay
     )
 
-    scaler = torch.amp.GradScaler()
+    if train_conf.get("use_amp", True):
+        scaler = torch.amp.GradScaler()
+    else:
+        scaler = None
 
     datasets_dir = Path(datasets_dir_path)
     dataset_name = train_conf["dataset"]

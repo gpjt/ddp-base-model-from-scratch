@@ -54,7 +54,8 @@ def save_checkpoint(
 
     save_model(model, checkpoint_dir / "model.safetensors")
     torch.save(optimizer.state_dict(), checkpoint_dir / "optimizer.pt")
-    torch.save(scaler.state_dict(), checkpoint_dir / "scaler.pt")
+    if scaler:
+        torch.save(scaler.state_dict(), checkpoint_dir / "scaler.pt")
     if scheduler is not None:
         torch.save(scheduler.state_dict(), checkpoint_dir / "scheduler.pt")
 
