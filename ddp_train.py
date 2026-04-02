@@ -447,7 +447,8 @@ def check_batch_size_works(
     batch_size,
     run_dir, dataset_dir,
     model, optimizer, scaler,
-    train_conf, model_conf
+    train_conf, model_conf,
+    use_amp,
 ):
     if dist.get_rank() == 0:
         print(f"Trying to train with batch size {batch_size}")
@@ -466,7 +467,7 @@ def check_batch_size_works(
             train_ds,
             start_global_step=0, best_loss=None,
             checkpoint_interval=None,
-            use_amp=train_conf.get("use_amp", True),
+            use_amp=use_amp,
             do_checkpoints=False, max_steps=3
         )
         if dist.get_rank() == 0:
@@ -484,7 +485,8 @@ def check_batch_size_works(
 def binary_chop_batch_sizes(
     run_dir, dataset_dir,
     model, optimizer, scaler, local_rank,
-    train_conf, model_conf
+    train_conf, model_conf,
+    use_amp,
 ):
     ddp_model = DDP(model, device_ids=[local_rank])
 
@@ -492,7 +494,8 @@ def binary_chop_batch_sizes(
         return check_batch_size_works(
             batch_size, run_dir, dataset_dir,
             ddp_model, optimizer, scaler,
-            train_conf, model_conf
+            train_conf, model_conf,
+            use_amp,
         )
 
     smallest_fail = 70
@@ -525,6 +528,7 @@ def load_datasets_and_train(
     dataset_dir,
     train_conf, model_conf,
     checkpoint, learning_rate,
+    use_amp,
 ):
     world_size = dist.get_world_size()
     train_ds = load_dataset(
@@ -573,7 +577,7 @@ def load_datasets_and_train(
         train_ds,
         global_step, best_loss,
         checkpoint_interval=train_conf["checkpoint_interval"],
-        use_amp=train_conf.get("use_amp", True),
+        use_amp=use_amp,
         do_checkpoints=True,
     )
 
@@ -630,7 +634,8 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
         lr=learning_rate, weight_decay=weight_decay
     )
 
-    if train_conf.get("use_amp", True):
+    use_amp = train_conf.get("use_amp", True)
+    if use_amp:
         scaler = torch.amp.GradScaler()
     else:
         scaler = None
@@ -650,7 +655,8 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
         max_microbatch_size = binary_chop_batch_sizes(
             run_dir, dataset_dir,
             model, optimizer, scaler, local_rank,
-            train_conf, model_conf
+            train_conf, model_conf,
+            use_amp,
         )
         if dist.get_rank() == 0:
             print(f"Max microbatch size was {max_microbatch_size}")
@@ -662,6 +668,7 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
             train_conf, model_conf,
             checkpoint,
             learning_rate,
+            use_amp,
         )
 
     dist.destroy_process_group()
