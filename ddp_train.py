@@ -312,9 +312,6 @@ def train(
     else:
         total_global_steps = len(train_ds) // world_size
 
-    if scaler is None and clipping_max_norm is None:
-        clipping_max_norm = math.inf
-
     print(f"Starting rank {rank} training at global step {start_global_step}")
     train_losses = []
     grad_norms = []
@@ -342,35 +339,35 @@ def train(
             logits = model(inputs)
             train_loss = calculate_loss(logits, targets)
 
-
         if scaler is not None:
             scaler.scale(train_loss).backward()
         else:
             train_loss.backward()
 
-        try:
-            if clipping_max_norm is not None:
-                if scaler:
-                    scaler.unscale_(optimizer)
-                pre_clip_norm = torch.nn.utils.clip_grad_norm_(
-                    model.parameters(),
-                    clipping_max_norm,
-                    error_if_nonfinite=scaler is None
-                ).item()
-                grad_norms.append(pre_clip_norm)
-                clipped_steps.append(pre_clip_norm > clipping_max_norm)
-
+        if clipping_max_norm is not None:
             if scaler is not None:
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                optimizer.step()
+                scaler.unscale_(optimizer)
+            pre_clip_norm = torch.nn.utils.clip_grad_norm_(
+                model.parameters(),
+                clipping_max_norm,
+                error_if_nonfinite=scaler is None
+            ).item()
+            grad_norms.append(pre_clip_norm)
+            clipped_steps.append(pre_clip_norm > clipping_max_norm)
 
-        except RuntimeError as ex:
-            if "gradients from `parameters` is non-finite" in str(ex):
-                print("Skipping non-finite gradients")
-            else:
-                raise
+        if scaler is not None:
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            # The scaler skips non-finite gradients, but if we're not using it we have
+            # to do that for ourselves.
+            found_nonfinite = False
+            for p in model.parameters():
+                if p.grad is not None and not torch.isfinite(p.grad).all():
+                    found_nonfinite = True
+                    break
+            if not found_nonfinite:
+                optimizer.step()
 
         current_learning_rate = optimizer.param_groups[0]["lr"]
         if scheduler is not None:
