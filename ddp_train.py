@@ -346,11 +346,7 @@ def train(
         if clipping_max_norm is not None:
             if scaler is not None:
                 scaler.unscale_(optimizer)
-            pre_clip_norm = torch.nn.utils.clip_grad_norm_(
-                model.parameters(),
-                clipping_max_norm,
-                error_if_nonfinite=scaler is None
-            ).item()
+            pre_clip_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), clipping_max_norm).item()
             grad_norms.append(pre_clip_norm)
             clipped_steps.append(pre_clip_norm > clipping_max_norm)
 
