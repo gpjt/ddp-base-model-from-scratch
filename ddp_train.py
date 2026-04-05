@@ -356,11 +356,14 @@ def train(
         else:
             # The scaler skips non-finite gradients, but if we're not using it we have
             # to do that for ourselves.
+            start = time.time()
             found_nonfinite = False
             for p in model.parameters():
                 if p.grad is not None and not torch.isfinite(p.grad).all():
                     found_nonfinite = True
                     break
+            end = time.time()
+            print("took", end-start)
             if not found_nonfinite:
                 optimizer.step()
 
