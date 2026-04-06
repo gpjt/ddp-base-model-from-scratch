@@ -60,7 +60,7 @@ def main(datasets_dir_path, model_config_path, model_safetensors_path):
             )
         test_loss = sum(test_losses) / len(test_losses)
 
-    print(f"Loss against our test dataset: {test_loss:.3f}")
+    print(f"Loss against our test dataset: {test_loss:.6f}")
 
 
 if __name__ == "__main__":
