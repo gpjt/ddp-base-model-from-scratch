@@ -1,0 +1,14 @@
+{
+    "random_seed": 67,
+    "microbatch_size": 12,
+    "checkpoint_interval": 617,
+    "dataset": "gpjt/fineweb-gpt2-tokens",
+    "min_train_tokens": 3260190720,
+    "start_train_token": 0,
+    "start_val_token": 0,
+    "clipping_max_norm": 3.5,
+    "weight_decay": 0.01,
+    "learning_rate": 0.0014,
+    "schedule_learning_rate": true,
+    "warmup_period_percent": 5
+}

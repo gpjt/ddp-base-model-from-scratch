@@ -623,7 +623,7 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
     dist.init_process_group(backend, device_id=local_rank)
 
     # Set all of the random seeds
-    seed = 42
+    seed = train_conf.get("random_seed", 42)
     random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
