@@ -5,5 +5,5 @@
     "n_heads": 12,
     "n_layers": 12,
     "drop_rate": 0.0,
-    "qkv_bias": true
+    "qkv_bias": false
 }
