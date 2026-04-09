@@ -9,5 +9,6 @@
     "learning_rate": 0.0014,
     "schedule_learning_rate": true,
     "warmup_period_percent": 5,
-    "use_amp": false
+    "use_amp": true,
+    "gradient_accumulation_steps": 16
 }
