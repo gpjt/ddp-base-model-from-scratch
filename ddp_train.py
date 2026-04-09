@@ -2,6 +2,7 @@ import json
 import os
 import random
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import click
@@ -50,13 +51,14 @@ def load_dataset(
     dataset_dir, split,
     min_tokens, start_token,
     world_size, microbatch_size,
+    gradient_accumulation_steps,
     seq_length
 ):
     full_dataset = load_file(dataset_dir / f"{split}.safetensors")["tokens"]
     if start_token > len(full_dataset):
         raise Exception(f"start_token {start_token} is past the end of the dataset")
 
-    one_full_batch_tokens = world_size * microbatch_size * seq_length
+    one_full_batch_tokens = world_size * microbatch_size * gradient_accumulation_steps * seq_length
 
     if min_tokens == -1:
         available_tokens = len(full_dataset) - start_token
@@ -294,7 +296,7 @@ def train(
     train_ds,
     start_global_step, best_loss,
     checkpoint_interval,
-    use_amp,
+    use_amp, gradient_accumulation_steps,
     do_checkpoints=True,
     max_steps=None,
 ):
@@ -309,7 +311,7 @@ def train(
     if max_steps is not None:
         total_global_steps = max_steps
     else:
-        total_global_steps = len(train_ds) // world_size
+        total_global_steps = (len(train_ds) // world_size) // gradient_accumulation_steps
 
     print(f"Starting rank {rank} training at global step {start_global_step}")
     train_losses = []
@@ -324,24 +326,30 @@ def train(
     )
     for global_step in progress_bar:
         model.train()
-        inputs, targets = train_ds[global_step * world_size + rank]
-        inputs = inputs.to(device).to(torch.long)
-        targets = targets.to(device).to(torch.long)
-
         optimizer.zero_grad(set_to_none=True)
 
-        if use_amp:
-            with torch.amp.autocast(device_type=device.type, dtype=torch.float16):
+        for accumulation_step in range(gradient_accumulation_steps):
+            inputs, targets = train_ds[((global_step * gradient_accumulation_steps) + accumulation_step) * world_size + rank]
+            inputs = inputs.to(device).to(torch.long)
+            targets = targets.to(device).to(torch.long)
+            if use_amp:
+                with torch.amp.autocast(device_type=device.type, dtype=torch.float16):
+                    logits = model(inputs)
+                    train_loss = calculate_loss(logits, targets)
+            else:
                 logits = model(inputs)
                 train_loss = calculate_loss(logits, targets)
-        else:
-            logits = model(inputs)
-            train_loss = calculate_loss(logits, targets)
 
-        if scaler is not None:
-            scaler.scale(train_loss).backward()
-        else:
-            train_loss.backward()
+            is_last = accumulation_step == gradient_accumulation_steps - 1
+            with model.no_sync() if not is_last else nullcontext():
+                if scaler is not None:
+                    scaler.scale(train_loss / gradient_accumulation_steps).backward()
+                else:
+                    (train_loss / gradient_accumulation_steps).backward()
+
+            train_losses.append(train_loss.item())
+            microbatch_size, sequence_length = inputs.shape
+            tokens_seen_this_rank += microbatch_size * sequence_length
 
         if clipping_max_norm is not None:
             if scaler is not None:
@@ -356,25 +364,17 @@ def train(
         else:
             # The scaler skips non-finite gradients, but if we're not using it we have
             # to do that for ourselves.
-            start = time.time()
             found_nonfinite = False
             for p in model.parameters():
                 if p.grad is not None and not torch.isfinite(p.grad).all():
                     found_nonfinite = True
                     break
-            end = time.time()
-            print("took", end-start)
             if not found_nonfinite:
                 optimizer.step()
 
         current_learning_rate = optimizer.param_groups[0]["lr"]
         if scheduler is not None:
             scheduler.step()
-
-        train_losses.append(train_loss.item())
-
-        microbatch_size, sequence_length = inputs.shape
-        tokens_seen_this_rank += microbatch_size * sequence_length
 
         if rank == 0:
             elapsed_time = time.time() - start_time
@@ -451,7 +451,7 @@ def check_batch_size_works(
     run_dir, dataset_dir,
     model, optimizer, scaler,
     train_conf, model_conf,
-    use_amp,
+    use_amp, gradient_accumulation_steps,
 ):
     if dist.get_rank() == 0:
         print(f"Trying to train with batch size {batch_size}")
@@ -459,6 +459,7 @@ def check_batch_size_works(
         dataset_dir, "train",
         train_conf["min_train_tokens"], train_conf["start_train_token"],
         dist.get_world_size(), batch_size,
+        gradient_accumulation_steps,
         model_conf["context_length"]
     )
 
@@ -470,7 +471,7 @@ def check_batch_size_works(
             train_ds,
             start_global_step=0, best_loss=None,
             checkpoint_interval=None,
-            use_amp=use_amp,
+            use_amp=use_amp, gradient_accumulation_steps=gradient_accumulation_steps,
             do_checkpoints=False, max_steps=3
         )
         if dist.get_rank() == 0:
@@ -489,7 +490,7 @@ def binary_chop_batch_sizes(
     run_dir, dataset_dir,
     model, optimizer, scaler, local_rank,
     train_conf, model_conf,
-    use_amp,
+    use_amp, gradient_accumulation_steps,
 ):
     ddp_model = DDP(model, device_ids=[local_rank])
 
@@ -498,7 +499,7 @@ def binary_chop_batch_sizes(
             batch_size, run_dir, dataset_dir,
             ddp_model, optimizer, scaler,
             train_conf, model_conf,
-            use_amp,
+            use_amp, gradient_accumulation_steps,
         )
 
     smallest_fail = 70
@@ -531,19 +532,20 @@ def load_datasets_and_train(
     dataset_dir,
     train_conf, model_conf,
     checkpoint, learning_rate,
-    use_amp,
+    use_amp, gradient_accumulation_steps,
 ):
     world_size = dist.get_world_size()
     train_ds = load_dataset(
         dataset_dir, "train",
         train_conf["min_train_tokens"], train_conf["start_train_token"],
         world_size, train_conf["microbatch_size"],
+        gradient_accumulation_steps,
         model_conf["context_length"]
     )
 
     scheduler = None
     if train_conf.get("schedule_learning_rate", False):
-        total_steps = len(train_ds) // world_size
+        total_steps = (len(train_ds) // world_size) // gradient_accumulation_steps
         warmup_steps = (total_steps * train_conf.get("warmup_period_percent", 0)) // 100
         decay_steps = total_steps - warmup_steps
         warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
@@ -580,7 +582,7 @@ def load_datasets_and_train(
         train_ds,
         global_step, best_loss,
         checkpoint_interval=train_conf["checkpoint_interval"],
-        use_amp=use_amp,
+        use_amp=use_amp, gradient_accumulation_steps=gradient_accumulation_steps,
         do_checkpoints=True,
     )
 
@@ -643,6 +645,8 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
     else:
         scaler = None
 
+    gradient_accumulation_steps = train_conf.get("gradient_accumulation_steps", 1)
+
     datasets_dir = Path(datasets_dir_path)
     dataset_name = train_conf["dataset"]
     dataset_dir = datasets_dir / dataset_name
@@ -659,7 +663,7 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
             run_dir, dataset_dir,
             model, optimizer, scaler, local_rank,
             train_conf, model_conf,
-            use_amp,
+            use_amp, gradient_accumulation_steps,
         )
         if dist.get_rank() == 0:
             print(f"Max microbatch size was {max_microbatch_size}")
@@ -671,7 +675,7 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
             train_conf, model_conf,
             checkpoint,
             learning_rate,
-            use_amp,
+            use_amp, gradient_accumulation_steps,
         )
 
     dist.destroy_process_group()
