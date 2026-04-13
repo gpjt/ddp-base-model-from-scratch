@@ -1,6 +1,6 @@
 {
     "microbatch_size": 6,
-    "gradient_accumulation_steps": 12,
+    "gradient_accumulation_steps": 16,
     "checkpoint_interval": 617,
     "dataset": "gpjt/fineweb-gpt2-tokens",
     "min_train_tokens": 3260190720,
