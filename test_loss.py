@@ -45,7 +45,8 @@ def main(datasets_dir_path, model_config_path, model_safetensors_path):
         dataset_dir, "validation",
         batches * batch_size * seq_len, 50_000_000,
         world_size, batch_size,
-        seq_len
+        gradient_accumulation_steps=1,
+        seq_length=seq_len,
     )
 
     model.eval()
