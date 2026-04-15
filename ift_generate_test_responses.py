@@ -11,6 +11,7 @@
 
 import json
 import os
+import random
 from functools import partial
 from pathlib import Path
 
@@ -272,6 +273,11 @@ def main(name, model_config_path, model_safetensors_path):
         raise Exception(f"Could not find model safetensors at {model_safetensors_path}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    seed = 42
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
     model = GPTModel(model_config)
     load_model(model, model_safetensors_path)
