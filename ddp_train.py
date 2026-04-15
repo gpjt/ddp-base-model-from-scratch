@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib import font_manager
 from matplotlib.ticker import MaxNLocator
 
-from safetensors.torch import load_file
+from safetensors.torch import load_file, save_model
 
 import torch
 import torch.distributed as dist
@@ -631,6 +631,11 @@ def main(run, datasets_dir_path, checkpoint, find_max_microbatch_size):
     torch.cuda.manual_seed_all(seed)
 
     model = GPTModel(model_conf).to(local_rank)
+
+    if local_rank == 0:
+        save_model(model, "init-weights.safetensors")
+    import sys
+    sys.exit(-1)
 
     learning_rate = train_conf.get("learning_rate", 0.0004)
     weight_decay = train_conf.get("weight_decay", 0.1)
