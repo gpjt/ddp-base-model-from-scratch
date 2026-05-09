@@ -36,7 +36,7 @@ def main(model_config_path, model_safetensors_path):
     tokens = tokenizer.encode(input_text)
 
     num_tokens = 20
-    temperature = 1.4
+    temperature = 1
     top_k = 25
     with torch.no_grad():
         for ix in range(num_tokens):
@@ -52,9 +52,12 @@ def main(model_config_path, model_safetensors_path):
                 torch.tensor(-math.inf).to(logits.device),
                 logits
             )
-            logits /= temperature
-            probs = torch.softmax(logits, dim=-1)
-            next_token = torch.multinomial(probs, num_samples=1).item()
+            if temperature != 0:
+                logits /= temperature
+                probs = torch.softmax(logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1).item()
+            else:
+                next_token = torch.argmax(logits, dim=-1, keepdim=True)
             tokens.append(next_token)
 
     print(tokenizer.decode(tokens))
