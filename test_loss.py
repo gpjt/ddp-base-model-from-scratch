@@ -40,7 +40,7 @@ def main(datasets_dir_path, model_config_path, model_safetensors_path):
     world_size = 1
     batches = 3200
     batch_size = 6
-    seq_len = 1024
+    seq_len = model_config["context_length"]
     test_ds = load_dataset(
         dataset_dir, "validation",
         batches * batch_size * seq_len, 50_000_000,
