@@ -196,7 +196,6 @@ def evaluate_model(model, val_loader, device, eval_iter):
         val_loss = calc_loss_loader(
             val_loader, model, device, num_batches=eval_iter
         )
-    model.train()
     return val_loss
 
 
@@ -217,8 +216,7 @@ def train_model(
             loss.backward()
             optimizer.step()
 
-        model.eval()
-        val_loss = calc_loss_loader(val_loader, model, device, eval_iter)
+        val_loss = evaluate_model(model, val_loader, device, eval_iter)
 
         if last_val_loss is None or last_val_loss > val_loss:
             last_val_loss = val_loss
@@ -235,6 +233,7 @@ def generate(
     model, idx, max_new_tokens, context_size,
     temperature=0.0, top_k=None, eos_id=None
 ):
+    model.eval()
     for _ in range(max_new_tokens):
         idx_cond = idx[:, -context_size:]
         with torch.no_grad():
