@@ -297,7 +297,7 @@ def main(name, model_config_path, model_safetensors_path):
 
     train_model(
         model, train_loader, val_loader, optimizer, device,
-        eval_iter=5
+        eval_iter=len(val_loader)
     )
 
     for i, entry in tqdm(enumerate(test_data), total=len(test_data)):
