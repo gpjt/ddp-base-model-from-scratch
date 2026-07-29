@@ -12,6 +12,7 @@
 import json
 import os
 import random
+from copy import deepcopy
 from functools import partial
 from pathlib import Path
 
@@ -221,7 +222,7 @@ def train_model(
 
         if last_val_loss is None or last_val_loss > val_loss:
             last_val_loss = val_loss
-            last_params = model.state_dict()
+            last_params = deepcopy(model.state_dict())
             print("Val loss still decreasing, continuing")
         else:
             print("Val loss rising, bailing out")
