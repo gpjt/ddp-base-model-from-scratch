@@ -190,11 +190,11 @@ def calc_loss_loader(data_loader, model, device, num_batches=None):
     return total_loss / num_batches
 
 
-def evaluate_model(model, val_loader, device, eval_iter):
+def evaluate_model(model, val_loader, device):
     model.eval()
     with torch.no_grad():
         val_loss = calc_loss_loader(
-            val_loader, model, device, num_batches=eval_iter
+            val_loader, model, device
         )
     return val_loss
 
@@ -202,7 +202,6 @@ def evaluate_model(model, val_loader, device, eval_iter):
 def train_model(
     model, train_loader, val_loader,
     optimizer, device,
-    eval_iter
 ):
     last_val_loss = None
     last_params = None
@@ -216,7 +215,7 @@ def train_model(
             loss.backward()
             optimizer.step()
 
-        val_loss = evaluate_model(model, val_loader, device, eval_iter)
+        val_loss = evaluate_model(model, val_loader, device)
 
         if last_val_loss is None or last_val_loss > val_loss:
             last_val_loss = val_loss
@@ -296,7 +295,6 @@ def main(name, model_config_path, model_safetensors_path):
 
     train_model(
         model, train_loader, val_loader, optimizer, device,
-        eval_iter=len(val_loader)
     )
 
     for i, entry in tqdm(enumerate(test_data), total=len(test_data)):
