@@ -21,25 +21,6 @@ def query_model(prompt):
     return response.output_text
 
 
-def generate_model_scores(json_data):
-    scores = []
-    for entry in tqdm(json_data, desc="Scoring entries"):
-        prompt = (
-            f"Given the input `{format_input(entry)}` "
-            f"and correct output `{entry['output']}`, "
-            f"score the model response `{entry['model_response']}` "
-            f"on a scale of 0 to 100, where 100 is the best score. "
-            f"Respond with the integer number only."
-        )
-        score = query_model(prompt)
-        try:
-            scores.append(int(score))
-        except ValueError:
-            print(f"Could not convert score: {score}")
-            continue
-
-    return scores
-
 
 PROMPT_PREFIX_FORMAT = """
 You are judging the comparative capabilities of a number of different LLM
@@ -98,7 +79,7 @@ def main(result_files):
         else:
             assert len(ift_results[result_file]) == length
 
-    # ...and that it's non-zeri
+    # ...and that it's non-zero
     assert length > 0
 
     # Check that they have the same instructions, inputs and outputs in the
@@ -142,14 +123,14 @@ def main(result_files):
         try:
             result = json.loads(result_text)
         except Exception:
-            print(f"Could not parse {result} as JSON")
+            print(f"Could not parse {result_text} as JSON")
             continue
 
         for jj, result_file in enumerate(result_files_shuffled):
             this_result_file_result = result[f"Model {jj + 1}"]
             final_scores[result_file] += this_result_file_result["score"]
             ift_results[result_file][ii]["llm_score"] = this_result_file_result["score"]
-            ift_results[result_file][ii]["llm_comments"] = this_result_file_result["comments"]
+            ift_results[result_file][ii]["llm_comments"] = this_result_file_result.get("comments", "")
 
     for result_file in result_files:
         print(f"{result_file}: {final_scores[result_file] / length:.2f}")
