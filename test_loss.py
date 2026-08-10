@@ -27,6 +27,7 @@ def main(datasets_dir_path, model_config_path, model_safetensors_path):
         raise Exception(f"Could not fine model config at {model_config_path}")
     with open(model_config_path, "r") as f:
         model_config = json.load(f)
+        model_config["drop_rate"] = 0.0
 
     if not Path(model_safetensors_path).is_file():
         raise Exception(f"Could not fine model safetensors at {model_safetensors_path}")
