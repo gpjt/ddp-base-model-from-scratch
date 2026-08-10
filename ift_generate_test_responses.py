@@ -262,11 +262,21 @@ def generate(
 @click.argument("name")
 @click.argument("model_config_path")
 @click.argument("model_safetensors_path")
-def main(name, model_config_path, model_safetensors_path):
+@click.option("--dropout", type=click.Choice(["model", "on", "off"]), required=True)
+def main(name, model_config_path, model_safetensors_path, dropout):
     if not Path(model_config_path).is_file():
         raise Exception(f"Could not find model config at {model_config_path}")
     with open(model_config_path, "r") as f:
         model_config = json.load(f)
+
+    if dropout == "model":
+        if "drop_rate" not in model_config:
+            print("No drop_rate in model config")
+            exit(-1)
+    elif dropout == "on":
+        model_config["drop_rate"] = 0.1
+    else:
+        model_config["drop_rate"] = 0.0
 
     if not Path(model_safetensors_path).is_file():
         raise Exception(f"Could not find model safetensors at {model_safetensors_path}")
