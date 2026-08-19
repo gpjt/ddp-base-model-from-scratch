@@ -116,6 +116,77 @@ class LayerNorm(nn.Module):
 
 
 
+class MixtureOfExperts(nn.Module):
+
+    def __init__(self, cfg):
+        super().__init__()
+        self.num_experts = cfg["moe"]["num_experts"]
+        self.num_active_experts = cfg["moe"]["num_active_experts"]
+        if self.num_active_experts < 2:
+            raise Exception(
+                f"Can't route with `num_active_experts` < 2 (got {self.num_active_experts})"
+            )
+        self.router = nn.Linear(cfg["emb_dim"], self.num_experts, bias=False)
+        self.experts = nn.ModuleList([
+            FeedForward(cfg) for _ in range(self.num_experts)
+        ])
+
+
+    def __call__(self, xs):
+        # xs is (batch_size, seq_len, d_emb).  If we feed it through the
+        # router the first two axes are treated as batches, which is what we
+        # want, so we'll get (batch_size, seq_len, num_experts)
+        routing_logits = self.router(xs)
+
+        # Now we use topd to get the top num_active_experts positions
+        # along that last num_experts dimension.  Setting sorted to true
+        # puts them in descending order, so the last element in each
+        # list for top_k_values will be the second-smallest if k=2
+        top_k_values, top_k_indices = torch.topk(
+            routing_logits,
+            k=self.num_active_experts,
+            dim=-1, sorted=True
+        )
+        lowest_top_k_values = top_k_values[:, :, -1:]
+        not_top_k_mask = routing_logits < lowest_top_k_values
+        # So now we set all values in the logits where they are not in
+        # the top-k to -inf so that they are ignored for softmax
+        masked_routing_logits = routing_logits.masked_fill(not_top_k_mask, -torch.inf)
+        expert_weights = torch.softmax(masked_routing_logits, dim=-1)
+
+        # So at this point, we have `expert_weights` with the same dimensions
+        # as routing_logits -- (batch_size, seq_len, num_experts).  The values
+        # are the weights for each expert -- zero if it is ont to be used,
+        # a positive number if it is.   This is following Shazeer et al, 2017.
+
+        # We'll run the experts in the dumbest possible way -- just create a
+        # bunch of zeros shaped like our outputs, then iterate over our experts
+        # one by one, sending them the subset of the xs they should see, then
+        # adding them into the result weighted by the expert's weight.
+        all_outputs = torch.zeros_like(xs)
+        for expert_ix, expert in enumerate(self.experts):
+            # This takes expert_weights, which is (batch_size, seq_len, num_experts),
+            # then:
+            # * gets the weights for expert expert_ix, which is (batch_size, seq_len)
+            # * finds the elements that are greater than zero -- so we have a boolean tensor
+            #   that is also of size (batch_size, seq_len)
+            this_expert_mask = expert_weights[:, :, expert_ix] > 0
+            # Now we use that to just get those elements of xs where that mask is True.
+            # and run them through the expert.  So we've run through specitically those
+            # data elements where the weight was non-zero, and we've got something where
+            # the first two dimensions could be pretty much anything less than or equal
+            # to the batch size and the sequence length respectively.
+            this_expert_results = expert(xs[this_expert_mask])
+            # Now, we can get the weights applicable to these results in a broadcastable
+            # form.
+            this_expert_weights = expert_weights[this_expert_mask, expert_ix].unsqueeze(1)
+            # And we can use them to add the weighted results to the outputs
+            all_outputs[this_expert_mask] += this_expert_results * this_expert_weights
+
+        return all_outputs
+
+
+
 class TransformersBlock(nn.Module):
 
     def __init__(self, cfg):
@@ -128,7 +199,10 @@ class TransformersBlock(nn.Module):
             dropout=cfg["drop_rate"],
             qkv_bias=cfg["qkv_bias"],
         )
-        self.ff = FeedForward(cfg)
+        if "moe" not in cfg:
+            self.ff = FeedForward(cfg)
+        else:
+            self.ff = MixtureOfExperts(cfg)
         self.norm1 = LayerNorm(cfg["emb_dim"])
         self.norm2 = LayerNorm(cfg["emb_dim"])
         self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
