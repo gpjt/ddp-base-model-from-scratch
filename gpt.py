@@ -124,7 +124,11 @@ class MixtureOfExperts(nn.Module):
         self.num_active_experts = cfg["moe"]["num_active_experts"]
         if self.num_active_experts < 2:
             raise Exception(
-                f"Can't route with `num_active_experts` < 2 (got {self.num_active_experts})"
+                f"Can't train with `num_active_experts` < 2 (got {self.num_active_experts})"
+            )
+        if self.num_active_experts > self.num_experts:
+            raise Exception(
+                f"{self.num_active_experts=} is larger than {self.num_experts=}"
             )
         self.router = nn.Linear(cfg["emb_dim"], self.num_experts, bias=False)
         self.experts = nn.ModuleList([
@@ -132,7 +136,7 @@ class MixtureOfExperts(nn.Module):
         ])
 
 
-    def __call__(self, xs):
+    def forward(self, xs):
         # xs is (batch_size, seq_len, d_emb).  If we feed it through the
         # router the first two axes are treated as batches, which is what we
         # want, so we'll get (batch_size, seq_len, num_experts)
@@ -149,6 +153,8 @@ class MixtureOfExperts(nn.Module):
         )
         lowest_top_k_values = top_k_values[:, :, -1:]
         not_top_k_mask = routing_logits < lowest_top_k_values
+        # TODO this will break if there are two matches at the smallest top-k's size.
+        # -- should use indices instead.
         # So now we set all values in the logits where they are not in
         # the top-k to -inf so that they are ignored for softmax
         masked_routing_logits = routing_logits.masked_fill(not_top_k_mask, -torch.inf)
