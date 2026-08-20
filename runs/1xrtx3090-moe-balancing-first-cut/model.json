@@ -1,0 +1,14 @@
+{
+    "vocab_size": 50257,
+    "context_length": 1024,
+    "emb_dim": 768,
+    "n_heads": 12,
+    "n_layers": 12,
+    "drop_rate": 0.0,
+    "qkv_bias": false,
+    "moe": {
+        "num_experts": 6,
+        "num_active_experts": 2,
+        "log_moe_balance_file": "runs/1xrtx3090-moe-no-balancing/routing_logits.jsonl"
+    }
+}
