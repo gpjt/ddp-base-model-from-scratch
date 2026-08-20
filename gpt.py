@@ -145,57 +145,28 @@ class MixtureOfExperts(nn.Module):
 
 
     def forward(self, xs):
-        # xs is (batch_size, seq_len, d_emb).  If we feed it through the
-        # router the first two axes are treated as batches, which is what we
-        # want, so we'll get (batch_size, seq_len, num_experts)
+        # See MoE calculations.ipynb for an explanation of how this
+        # all works.
         routing_logits = self.router(xs)
+
+        # We're stashing away a copy of the logits (with the compute graph
+        # detached) so that we can log it later on.
         self.last_routing_logits = routing_logits.detach()
 
-        # Now we use topd to get the top num_active_experts positions
-        # along that last num_experts dimension.  Setting sorted to true
-        # puts them in descending order, so the last element in each
-        # list for top_k_values will be the second-smallest if k=2
         top_k_values, top_k_indices = torch.topk(
             routing_logits,
             k=self.num_active_experts,
-            dim=-1, sorted=True
+            dim=-1
         )
-        lowest_top_k_values = top_k_values[:, :, -1:]
-        not_top_k_mask = routing_logits < lowest_top_k_values
-        # TODO this will break if there are two matches at the smallest top-k's size.
-        # -- should use indices instead.
-        # So now we set all values in the logits where they are not in
-        # the top-k to -inf so that they are ignored for softmax
-        masked_routing_logits = routing_logits.masked_fill(not_top_k_mask, -torch.inf)
-        expert_weights = torch.softmax(masked_routing_logits, dim=-1)
+        top_k_routing_logits = torch.full_like(routing_logits, -torch.inf)
+        top_k_routing_logits.scatter_(dim=-1, index=top_k_indices, src=top_k_values)
+        expert_weights = torch.softmax(top_k_routing_logits, dim=-1)
 
-        # So at this point, we have `expert_weights` with the same dimensions
-        # as routing_logits -- (batch_size, seq_len, num_experts).  The values
-        # are the weights for each expert -- zero if it is ont to be used,
-        # a positive number if it is.   This is following Shazeer et al, 2017.
-
-        # We'll run the experts in the dumbest possible way -- just create a
-        # bunch of zeros shaped like our outputs, then iterate over our experts
-        # one by one, sending them the subset of the xs they should see, then
-        # adding them into the result weighted by the expert's weight.
         all_outputs = torch.zeros_like(xs)
         for expert_ix, expert in enumerate(self.experts):
-            # This takes expert_weights, which is (batch_size, seq_len, num_experts),
-            # then:
-            # * gets the weights for expert expert_ix, which is (batch_size, seq_len)
-            # * finds the elements that are greater than zero -- so we have a boolean tensor
-            #   that is also of size (batch_size, seq_len)
             this_expert_mask = expert_weights[:, :, expert_ix] > 0
-            # Now we use that to just get those elements of xs where that mask is True.
-            # and run them through the expert.  So we've run through specitically those
-            # data elements where the weight was non-zero, and we've got something where
-            # the first two dimensions could be pretty much anything less than or equal
-            # to the batch size and the sequence length respectively.
             this_expert_results = expert(xs[this_expert_mask])
-            # Now, we can get the weights applicable to these results in a broadcastable
-            # form.
             this_expert_weights = expert_weights[this_expert_mask, expert_ix].unsqueeze(1)
-            # And we can use them to add the weighted results to the outputs
             all_outputs[this_expert_mask] += this_expert_results * this_expert_weights
 
         return all_outputs
