@@ -372,6 +372,8 @@ def train(
             if not found_nonfinite:
                 optimizer.step()
 
+        model.module.log_routing_logits(global_step)
+
         current_learning_rate = optimizer.param_groups[0]["lr"]
         if scheduler is not None:
             scheduler.step()

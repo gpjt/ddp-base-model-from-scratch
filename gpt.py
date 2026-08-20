@@ -6,7 +6,9 @@
 # You may obtain a copy of the License at
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Modifications copyright 2025 Giles Thomas
+# Modifications copyright 2025, 2026 Giles Thomas
+
+import json
 
 import torch
 import torch.nn as nn
@@ -126,6 +128,20 @@ class MixtureOfExperts(nn.Module):
         self.experts = nn.ModuleList([
             FeedForward(cfg) for _ in range(self.num_experts)
         ])
+        self.last_routing_logits = None
+
+
+    def log_routing_logits(self, f, step, name):
+        json.dump(
+            {
+                "step": step,
+                "name": name,
+                "routing_logits": self.last_routing_logits.tolist(),
+            },
+            f
+        )
+        f.write("\n")
+        self.last_routing_logits = None
 
 
     def forward(self, xs):
@@ -133,6 +149,7 @@ class MixtureOfExperts(nn.Module):
         # router the first two axes are treated as batches, which is what we
         # want, so we'll get (batch_size, seq_len, num_experts)
         routing_logits = self.router(xs)
+        self.last_routing_logits = routing_logits.detach()
 
         # Now we use topd to get the top num_active_experts positions
         # along that last num_experts dimension.  Setting sorted to true
@@ -244,6 +261,10 @@ class GPTModel(nn.Module):
         if cfg.get("tie_weights", False):
             self.out_head.weight = self.tok_emb.weight
 
+        self.log_moe_balance_file = None
+        if cfg.get("moe") and cfg["moe"].get("log_moe_balance_file"):
+            self.log_moe_balance_file = cfg["moe"]["log_moe_balance_file"]
+
 
     def forward(self, in_idx):
         batch_size, seq_len = in_idx.shape
@@ -259,4 +280,15 @@ class GPTModel(nn.Module):
         logits = self.out_head(x)
 
         return logits
+
+
+    def log_routing_logits(self, step):
+        if not self.log_moe_balance_file:
+            return
+
+        with open(self.log_moe_balance_file, "a") as f:
+            for name, module in self.named_modules():
+                if isinstance(module, MixtureOfExperts):
+                    module.log_routing_logits(f, step, name)
+
 
