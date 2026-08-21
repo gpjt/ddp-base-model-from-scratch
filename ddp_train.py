@@ -289,6 +289,16 @@ def calculate_loss(logits, targets):
     )
 
 
+
+def average_per_layer_moe_routing_weights(weights):
+    batch_size, seq_len, num_experts = weights.shape
+    weights_view = weights.view(
+        ((batch_size * seq_len), num_experts)
+    )
+    return weights_view.mean(dim=0).tolist()
+
+
+
 def train(
     run_dir,
     model, optimizer, scaler, scheduler,
@@ -315,6 +325,8 @@ def train(
 
     print(f"Starting rank {rank} training at global step {start_global_step}")
     train_losses = []
+    moe_routing_weights = []
+    moe_routing_topk_weights = []
     grad_norms = []
     clipped_steps = []
     start_time = time.time()
@@ -348,6 +360,26 @@ def train(
                     (train_loss / gradient_accumulation_steps).backward()
 
             train_losses.append(train_loss.item())
+
+            if moe_routing_info is not None:
+                layer_average_routing_weights = []
+                layer_average_topk_routing_weights = []
+                for layer_routing_info in moe_routing_info:
+                    layer_routing_logits, layer_topk_expert_weights = layer_routing_info
+
+                    layer_average_routing_weights.append(
+                        average_per_layer_moe_routing_weights(
+                            torch.softmax(layer_routing_logits.detach(), dim=-1)
+                        )
+                    )
+                    layer_average_topk_routing_weights.append(
+                        average_per_layer_moe_routing_weights(
+                            layer_topk_expert_weights.detach()
+                        )
+                    )
+                moe_routing_weights.append(layer_average_routing_weights)
+                moe_routing_topk_weights.append(layer_average_topk_routing_weights)
+
             microbatch_size, sequence_length = inputs.shape
             tokens_seen_this_rank += microbatch_size * sequence_length
 
@@ -372,7 +404,6 @@ def train(
             if not found_nonfinite:
                 optimizer.step()
 
-        model.module.log_routing_logits(global_step)
 
         current_learning_rate = optimizer.param_groups[0]["lr"]
         if scheduler is not None:
@@ -427,9 +458,12 @@ def train(
                     current_learning_rate,
                     min_train_loss, max_train_loss, avg_train_loss,
                     max_grad_norms, avg_grad_norms, frac_clipped,
+                    moe_routing_weights, moe_routing_topk_weights,
                     global_step,
                     is_best
                 )
+                moe_routing_weights = []
+                moe_routing_topk_weights = []
                 generate_training_charts(run_dir, clipping_max_norm)
 
                 model.train()

@@ -8,8 +8,6 @@
 #
 # Modifications copyright 2025, 2026 Giles Thomas
 
-import json
-
 import torch
 import torch.nn as nn
 
@@ -131,19 +129,6 @@ class MixtureOfExperts(nn.Module):
         self.last_routing_logits = None
 
 
-    def log_routing_logits(self, f, step, name):
-        json.dump(
-            {
-                "step": step,
-                "name": name,
-                "routing_logits": self.last_routing_logits.tolist(),
-            },
-            f
-        )
-        f.write("\n")
-        self.last_routing_logits = None
-
-
     def forward(self, xs):
         # See moe-calculations-explainer.ipynb for an explanation of how this
         # all works.
@@ -258,15 +243,3 @@ class GPTModel(nn.Module):
         logits = self.out_head(x)
 
         return logits, moe_routing_info
-
-
-    def log_routing_logits(self, step):
-        if not self.log_moe_balance_file:
-            return
-
-        with open(self.log_moe_balance_file, "a") as f:
-            for name, module in self.named_modules():
-                if isinstance(module, MixtureOfExperts):
-                    module.log_routing_logits(f, step, name)
-
-
