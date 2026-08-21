@@ -76,22 +76,6 @@ class MultiHeadAttention(nn.Module):
 
 
 
-class FeedForward(nn.Module):
-
-    def __init__(self, cfg):
-        super().__init__()
-        self.layers = nn.Sequential(
-            nn.Linear(cfg["emb_dim"], cfg["emb_dim"] * 4),
-            nn.GELU(approximate="tanh"),
-            nn.Linear(cfg["emb_dim"] * 4, cfg["emb_dim"])
-        )
-
-
-    def forward(self, x):
-        return self.layers(x)
-
-
-
 class LayerNorm(nn.Module):
 
     def __init__(self, emb_dim):
@@ -107,6 +91,22 @@ class LayerNorm(nn.Module):
         var = x.var(dim=-1, keepdim=True, unbiased=False)
         norm_x = (x - mean) / torch.sqrt(var + self.eps)
         return self.scale * norm_x + self.shift
+
+
+
+class FeedForward(nn.Module):
+
+    def __init__(self, cfg):
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Linear(cfg["emb_dim"], cfg["emb_dim"] * 4),
+            nn.GELU(approximate="tanh"),
+            nn.Linear(cfg["emb_dim"] * 4, cfg["emb_dim"])
+        )
+
+
+    def forward(self, x):
+        return self.layers(x), None
 
 
 
@@ -165,11 +165,11 @@ class MixtureOfExperts(nn.Module):
         all_outputs = torch.zeros_like(xs)
         for expert_ix, expert in enumerate(self.experts):
             this_expert_mask = expert_weights[:, :, expert_ix] > 0
-            this_expert_results = expert(xs[this_expert_mask])
+            this_expert_results, _ = expert(xs[this_expert_mask])
             this_expert_weights = expert_weights[this_expert_mask, expert_ix].unsqueeze(1)
             all_outputs[this_expert_mask] += this_expert_results * this_expert_weights
 
-        return all_outputs
+        return all_outputs, (routing_logits, expert_weights)
 
 
 
@@ -185,16 +185,21 @@ class TransformersBlock(nn.Module):
             dropout=cfg["drop_rate"],
             qkv_bias=cfg["qkv_bias"],
         )
-        if "moe" not in cfg:
-            self.ff = FeedForward(cfg)
-        else:
+        self.is_moe = "moe" in cfg
+        if self.is_moe:
             self.ff = MixtureOfExperts(cfg)
+        else:
+            self.ff = FeedForward(cfg)
         self.norm1 = LayerNorm(cfg["emb_dim"])
         self.norm2 = LayerNorm(cfg["emb_dim"])
         self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
 
 
-    def forward(self, x):
+    def forward(self, inputs):
+        x, moe_routing_info = inputs
+        if self.is_moe and moe_routing_info is None:
+            moe_routing_info = []
+
         shortcut = x
         x = self.norm1(x)
         x = self.att(x)
@@ -203,11 +208,13 @@ class TransformersBlock(nn.Module):
 
         shortcut = x
         x = self.norm2(x)
-        x = self.ff(x)
+        x, this_block_moe_routing_info = self.ff(x)
+        if self.is_moe:
+            moe_routing_info.append(this_block_moe_routing_info)
         x = self.drop_shortcut(x)
         x = x + shortcut
 
-        return x
+        return x, moe_routing_info
 
 
 
@@ -245,12 +252,12 @@ class GPTModel(nn.Module):
         x = tok_embeds + pos_embeds
 
         x = self.drop_emb(x)
-        x = self.trf_blocks(x)
+        x, moe_routing_info = self.trf_blocks((x, None))
         x = self.final_norm(x)
 
         logits = self.out_head(x)
 
-        return logits
+        return logits, moe_routing_info
 
 
     def log_routing_logits(self, step):

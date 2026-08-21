@@ -334,10 +334,10 @@ def train(
             targets = targets.to(device).to(torch.long)
             if use_amp:
                 with torch.amp.autocast(device_type=device.type, dtype=torch.float16):
-                    logits = model(inputs)
+                    logits, moe_routing_info = model(inputs)
                     train_loss = calculate_loss(logits, targets)
             else:
-                logits = model(inputs)
+                logits, moe_routing_info = model(inputs)
                 train_loss = calculate_loss(logits, targets)
 
             is_last = accumulation_step == gradient_accumulation_steps - 1
