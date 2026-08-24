@@ -425,7 +425,7 @@ def train(
             with torch.amp.autocast(device_type=device.type, dtype=torch.float16) if use_amp else nullcontext():
                 logits = model(inputs)
                 train_loss = calculate_loss(logits, targets)
-                if hasattr(logits, "moe_routing_info") and moe_router_loss_scale:
+                if hasattr(logits, "moe_routing_info") and logits.moe_routing_info is not None:
                     moe_router_loss = calculate_moe_router_loss(logits.moe_routing_info)
                     moe_router_losses.append(moe_router_loss.item())
                 else:
