@@ -432,7 +432,6 @@ def train(
                 min_train_loss = min(train_losses)
                 max_train_loss = max(train_losses)
                 avg_train_loss = sum(train_losses) / len(train_losses)
-                train_losses = []
 
                 if best_loss is None or avg_train_loss < best_loss:
                     is_best = True
@@ -448,8 +447,6 @@ def train(
                     max_grad_norms = None
                     avg_grad_norms = None
                     frac_clipped = None
-                grad_norms = []
-                clipped_steps = []
 
                 save_checkpoint(
                     run_dir,
@@ -462,12 +459,16 @@ def train(
                     global_step,
                     is_best
                 )
-                moe_routing_weights = []
-                moe_routing_topk_weights = []
                 generate_training_charts(run_dir, clipping_max_norm)
 
                 model.train()
                 print("\nContinuing training")
+
+            train_losses = []
+            grad_norms = []
+            clipped_steps = []
+            moe_routing_weights = []
+            moe_routing_topk_weights = []
 
             dist.barrier()
 
