@@ -241,5 +241,6 @@ class GPTModel(nn.Module):
         x = self.final_norm(x)
 
         logits = self.out_head(x)
+        logits.moe_routing_info = moe_routing_info
 
-        return logits, moe_routing_info
+        return logits

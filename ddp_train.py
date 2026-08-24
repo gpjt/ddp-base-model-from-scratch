@@ -346,10 +346,10 @@ def train(
             targets = targets.to(device).to(torch.long)
             if use_amp:
                 with torch.amp.autocast(device_type=device.type, dtype=torch.float16):
-                    logits, moe_routing_info = model(inputs)
+                    logits = model(inputs)
                     train_loss = calculate_loss(logits, targets)
             else:
-                logits, moe_routing_info = model(inputs)
+                logits = model(inputs)
                 train_loss = calculate_loss(logits, targets)
 
             is_last = accumulation_step == gradient_accumulation_steps - 1
@@ -361,10 +361,10 @@ def train(
 
             train_losses.append(train_loss.item())
 
-            if moe_routing_info is not None:
+            if logits.moe_routing_info is not None:
                 layer_average_routing_weights = []
                 layer_average_topk_routing_weights = []
-                for layer_routing_info in moe_routing_info:
+                for layer_routing_info in logits.moe_routing_info:
                     layer_routing_logits, layer_topk_expert_weights = layer_routing_info
 
                     layer_average_routing_weights.append(
