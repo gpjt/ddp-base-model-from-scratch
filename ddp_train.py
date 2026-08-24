@@ -361,7 +361,6 @@ def calculate_moe_router_loss(moe_routing_info):
 
         total_routing_loss += layer_routing_loss
 
-    print(f"{total_routing_loss=}")
     return total_routing_loss
 
 
@@ -704,8 +703,8 @@ def load_datasets_and_train(
         global_step = 0
         best_loss = None
 
-    moe_router_loss_scale = None
-    if model_conf["moe"]:
+    moe_router_loss_scale = 0
+    if model_conf.get("moe"):
         moe_router_loss_scale = train_conf.get("moe_router_loss_scale", 0)
 
     ddp_model = DDP(model, device_ids=[local_rank])

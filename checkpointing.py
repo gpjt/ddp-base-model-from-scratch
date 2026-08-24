@@ -74,7 +74,7 @@ def save_checkpoint(
                 moe_routing_weights=moe_routing_weights,
                 moe_routing_topk_weights=moe_routing_topk_weights,
                 min_moe_router_loss=min_moe_router_loss,
-                max_moe_router_loss=avg_moe_router_loss,
+                max_moe_router_loss=max_moe_router_loss,
                 avg_moe_router_loss=avg_moe_router_loss,
                 global_step=global_step,
                 is_best=is_best,
