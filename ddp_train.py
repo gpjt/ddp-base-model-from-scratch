@@ -99,6 +99,9 @@ def get_training_data(run_dir):
     avg_train_losses = []
     max_grad_norms = []
     avg_grad_norms = []
+    min_moe_router_losses = []
+    max_moe_router_losses = []
+    avg_moe_router_losses = []
     frac_clipped = []
     best_global_step = None
     for item in checkpoints_dir.iterdir():
@@ -123,6 +126,13 @@ def get_training_data(run_dir):
         if meta.get("frac_clipped") is not None:
             frac_clipped.append((meta["global_step"], meta["frac_clipped"]))
 
+        if meta.get("min_moe_router_loss") is not None:
+            min_moe_router_losses.append((meta["global_step"], meta["min_moe_router_loss"]))
+        if meta.get("max_moe_router_loss") is not None:
+            max_moe_router_losses.append((meta["global_step"], meta["max_moe_router_loss"]))
+        if meta.get("avg_moe_router_loss") is not None:
+            avg_moe_router_losses.append((meta["global_step"], meta["avg_moe_router_loss"]))
+
     learning_rates.sort(key=lambda x: x[0])
     min_train_losses.sort(key=lambda x: x[0])
     max_train_losses.sort(key=lambda x: x[0])
@@ -130,11 +140,15 @@ def get_training_data(run_dir):
     max_grad_norms.sort(key=lambda x: x[0])
     avg_grad_norms.sort(key=lambda x: x[0])
     frac_clipped.sort(key=lambda x: x[0])
+    min_moe_router_losses.sort(key=lambda x: x[0])
+    max_moe_router_losses.sort(key=lambda x: x[0])
+    avg_moe_router_losses.sort(key=lambda x: x[0])
 
     return (
         learning_rates,
         min_train_losses, max_train_losses, avg_train_losses,
         max_grad_norms, avg_grad_norms, frac_clipped,
+        min_moe_router_losses, max_moe_router_losses, avg_moe_router_losses,
         best_global_step
     )
 
@@ -144,6 +158,7 @@ def generate_training_charts(run_dir, clipping_max_norm):
         learning_rates,
         min_train_points, max_train_points, avg_train_points,
         max_grad_points, avg_grad_points, frac_clipped_points,
+        min_moe_router_losses, max_moe_router_losses, avg_moe_router_losses,
         best_global_step
     ) = get_training_data(run_dir)
 
@@ -157,7 +172,7 @@ def generate_training_charts(run_dir, clipping_max_norm):
     if font_family is not None:
         plt.rcParams['font.family'] = font_family
 
-    # --- Chart 1: Loss ---
+    # --- Chart 1: Loss (+ MoE router loss on a secondary axis) ---
 
     fig, ax_loss = plt.subplots(figsize=(8, 6), dpi=100)
 
@@ -185,7 +200,8 @@ def generate_training_charts(run_dir, clipping_max_norm):
     ax_loss.set_title("TRAINING RUN: LOSS")
     ax_loss.set_xlabel("GLOBAL STEP")
     ax_loss.xaxis.set_major_locator(MaxNLocator(integer=True))
-    ax_loss.set_ylabel("LOSS")
+    ax_loss.set_ylabel("LOSS", color="blue")
+    ax_loss.tick_params(axis="y", labelcolor="blue")
 
     if best_global_step is not None:
         ax_loss.axvline(
@@ -196,7 +212,44 @@ def generate_training_charts(run_dir, clipping_max_norm):
             label="BEST STEP",
         )
 
-    ax_loss.legend(
+    ax_router = None
+    if avg_moe_router_losses:
+        ax_router = ax_loss.twinx()
+
+        router_steps, min_router_losses = zip(*min_moe_router_losses)
+        _, max_router_losses = zip(*max_moe_router_losses)
+        _, avg_router_losses = zip(*avg_moe_router_losses)
+
+        ax_router.fill_between(
+            router_steps,
+            min_router_losses,
+            max_router_losses,
+            color="orange",
+            alpha=0.15,
+            label="MIN–MAX ROUTER LOSS",
+        )
+        ax_router.plot(
+            router_steps,
+            avg_router_losses,
+            color="darkorange",
+            label="AVG ROUTER LOSS",
+            marker="s",
+            markersize=4,
+            linestyle="-.",
+        )
+        ax_router.set_ylabel("MOE ROUTER LOSS", color="darkorange")
+        ax_router.tick_params(axis="y", labelcolor="darkorange")
+
+    # Merge legends from both axes so everything shows in one box.
+    handles, labels = ax_loss.get_legend_handles_labels()
+    if ax_router is not None:
+        router_handles, router_labels = ax_router.get_legend_handles_labels()
+        handles += router_handles
+        labels += router_labels
+    # Draw on the topmost axis so the legend isn't hidden behind the twin.
+    (ax_router if ax_router is not None else ax_loss).legend(
+        handles,
+        labels,
         loc="upper right",
         handlelength=2.0,
         handletextpad=0.6,
@@ -289,6 +342,29 @@ def calculate_loss(logits, targets):
     )
 
 
+def calculate_moe_router_loss(moe_routing_info):
+    # See moe-calculations-explainer.ipynb for how this all came about.
+    # This is the "sum loss per layer" implementation there.
+    total_routing_loss = 0
+    for routing_logits, expert_weights in moe_routing_info:
+        batch_size, seq_len, num_experts = expert_weights.shape
+
+        flattened_expert_weights = expert_weights.view((batch_size * seq_len, num_experts))
+        expert_active_counts = (flattened_expert_weights > 0).sum(dim=0)
+        expert_frequencies = expert_active_counts / (batch_size * seq_len)
+
+        raw_routing_weights = torch.softmax(routing_logits, dim=-1)
+        flattened_raw_routing_weights = raw_routing_weights.view((batch_size * seq_len, num_experts))
+        expert_prob_allocation = flattened_raw_routing_weights.sum(dim=0) / (batch_size * seq_len)
+
+        layer_routing_loss = num_experts * torch.dot(expert_frequencies, expert_prob_allocation)
+
+        total_routing_loss += layer_routing_loss
+
+    print(f"{total_routing_loss=}")
+    return total_routing_loss
+
+
 
 def average_per_layer_moe_routing_weights(weights):
     batch_size, seq_len, num_experts = weights.shape
@@ -307,9 +383,11 @@ def train(
     start_global_step, best_loss,
     checkpoint_interval,
     use_amp, gradient_accumulation_steps,
+    moe_router_loss_scale,
     do_checkpoints=True,
     max_steps=None,
 ):
+    print(f"{moe_router_loss_scale=}")
     device = next(model.parameters()).device
 
     if use_amp:
@@ -327,6 +405,7 @@ def train(
     train_losses = []
     moe_routing_weights = []
     moe_routing_topk_weights = []
+    moe_router_losses = []
     grad_norms = []
     clipped_steps = []
     start_time = time.time()
@@ -344,20 +423,22 @@ def train(
             inputs, targets = train_ds[((global_step * gradient_accumulation_steps) + accumulation_step) * world_size + rank]
             inputs = inputs.to(device).to(torch.long)
             targets = targets.to(device).to(torch.long)
-            if use_amp:
-                with torch.amp.autocast(device_type=device.type, dtype=torch.float16):
-                    logits = model(inputs)
-                    train_loss = calculate_loss(logits, targets)
-            else:
+            with torch.amp.autocast(device_type=device.type, dtype=torch.float16) if use_amp else nullcontext():
                 logits = model(inputs)
                 train_loss = calculate_loss(logits, targets)
+                if hasattr(logits, "moe_routing_info") and moe_router_loss_scale:
+                    moe_router_loss = calculate_moe_router_loss(logits.moe_routing_info)
+                    moe_router_losses.append(moe_router_loss.item())
+                else:
+                    moe_router_loss = 0
 
             is_last = accumulation_step == gradient_accumulation_steps - 1
             with model.no_sync() if not is_last else nullcontext():
+                total_loss = train_loss + moe_router_loss * moe_router_loss_scale
                 if scaler is not None:
-                    scaler.scale(train_loss / gradient_accumulation_steps).backward()
+                    scaler.scale(total_loss / gradient_accumulation_steps).backward()
                 else:
-                    (train_loss / gradient_accumulation_steps).backward()
+                    (total_loss / gradient_accumulation_steps).backward()
 
             train_losses.append(train_loss.item())
 
@@ -433,6 +514,16 @@ def train(
                 max_train_loss = max(train_losses)
                 avg_train_loss = sum(train_losses) / len(train_losses)
 
+                if moe_router_losses:
+                    min_moe_router_loss = min(moe_router_losses)
+                    max_moe_router_loss = max(moe_router_losses)
+                    avg_moe_router_loss = sum(moe_router_losses) / len(moe_router_losses)
+                else:
+                    min_moe_router_loss = 0
+                    max_moe_router_loss = 0
+                    avg_moe_router_loss = 0
+
+
                 if best_loss is None or avg_train_loss < best_loss:
                     is_best = True
                     best_loss = avg_train_loss
@@ -456,6 +547,7 @@ def train(
                     min_train_loss, max_train_loss, avg_train_loss,
                     max_grad_norms, avg_grad_norms, frac_clipped,
                     moe_routing_weights, moe_routing_topk_weights,
+                    min_moe_router_loss, max_moe_router_loss, avg_moe_router_loss,
                     global_step,
                     is_best
                 )
@@ -469,6 +561,7 @@ def train(
             clipped_steps = []
             moe_routing_weights = []
             moe_routing_topk_weights = []
+            moe_router_losses = []
 
             dist.barrier()
 
@@ -509,6 +602,7 @@ def check_batch_size_works(
             start_global_step=0, best_loss=None,
             checkpoint_interval=None,
             use_amp=use_amp, gradient_accumulation_steps=gradient_accumulation_steps,
+            moe_router_loss_scale=0,
             do_checkpoints=False, max_steps=3
         )
         if dist.get_rank() == 0:
@@ -610,6 +704,10 @@ def load_datasets_and_train(
         global_step = 0
         best_loss = None
 
+    moe_router_loss_scale = None
+    if model_conf["moe"]:
+        moe_router_loss_scale = train_conf.get("moe_router_loss_scale", 0)
+
     ddp_model = DDP(model, device_ids=[local_rank])
 
     train(
@@ -620,6 +718,7 @@ def load_datasets_and_train(
         global_step, best_loss,
         checkpoint_interval=train_conf["checkpoint_interval"],
         use_amp=use_amp, gradient_accumulation_steps=gradient_accumulation_steps,
+        moe_router_loss_scale=moe_router_loss_scale,
         do_checkpoints=True,
     )
 

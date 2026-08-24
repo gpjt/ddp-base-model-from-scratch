@@ -42,6 +42,7 @@ def save_checkpoint(
     min_train_loss, max_train_loss, avg_train_loss,
     max_grad_norms, avg_grad_norms, frac_clipped,
     moe_routing_weights, moe_routing_topk_weights,
+    min_moe_router_loss, max_moe_router_loss, avg_moe_router_loss,
     global_step, is_best
 ):
     checkpoints_dir = get_checkpoints_dir(run_dir)
@@ -72,6 +73,9 @@ def save_checkpoint(
                 frac_clipped=frac_clipped,
                 moe_routing_weights=moe_routing_weights,
                 moe_routing_topk_weights=moe_routing_topk_weights,
+                min_moe_router_loss=min_moe_router_loss,
+                max_moe_router_loss=avg_moe_router_loss,
+                avg_moe_router_loss=avg_moe_router_loss,
                 global_step=global_step,
                 is_best=is_best,
             ),

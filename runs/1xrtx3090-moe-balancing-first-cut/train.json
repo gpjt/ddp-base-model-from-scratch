@@ -1,7 +1,7 @@
 {
     "microbatch_size": 3,
     "gradient_accumulation_steps": 32,
-    "checkpoint_interval": 617,
+    "checkpoint_interval": 10,
     "dataset": "gpjt/fineweb-gpt2-tokens",
     "min_train_tokens": 3260190720,
     "start_train_token": 0,
@@ -10,5 +10,6 @@
     "weight_decay": 0.01,
     "learning_rate": 0.0014,
     "schedule_learning_rate": true,
-    "warmup_period_percent": 5
+    "warmup_period_percent": 5,
+    "moe_router_loss_scale": 0.001
 }

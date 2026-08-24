@@ -8,7 +8,6 @@
     "qkv_bias": false,
     "moe": {
         "num_experts": 6,
-        "num_active_experts": 2,
-        "log_moe_balance_file": "runs/1xrtx3090-moe-no-balancing/routing_logits.jsonl"
+        "num_active_experts": 2
     }
 }
