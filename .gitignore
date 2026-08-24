@@ -7,8 +7,7 @@ runs/*/learning-rate-chart.png
 runs/*/grad-norm-chart.png
 runs/*/loss-chart.png
 runs/*/checkpoints/
-runs/*/routing_logits.jsonl
-runs/*/layer_*_balance.png
+runs/*/routing-layer-*.png
 instruction-data.json
 *-ift-test-results.json
 *-ift-test-results-annotated.json
