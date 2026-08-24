@@ -126,17 +126,12 @@ class MixtureOfExperts(nn.Module):
         self.experts = nn.ModuleList([
             FeedForward(cfg) for _ in range(self.num_experts)
         ])
-        self.last_routing_logits = None
 
 
     def forward(self, xs):
         # See moe-calculations-explainer.ipynb for an explanation of how this
         # all works.
         routing_logits = self.router(xs)
-
-        # We're stashing away a copy of the logits (with the compute graph
-        # detached) so that we can log it later on.
-        self.last_routing_logits = routing_logits.detach()
 
         top_k_values, top_k_indices = torch.topk(
             routing_logits,
@@ -223,10 +218,6 @@ class GPTModel(nn.Module):
         )
         if cfg.get("tie_weights", False):
             self.out_head.weight = self.tok_emb.weight
-
-        self.log_moe_balance_file = None
-        if cfg.get("moe") and cfg["moe"].get("log_moe_balance_file"):
-            self.log_moe_balance_file = cfg["moe"]["log_moe_balance_file"]
 
 
     def forward(self, in_idx):
