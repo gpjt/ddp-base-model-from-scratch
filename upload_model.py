@@ -34,6 +34,13 @@ def main(model_config_path, model_safetensors_path, train_config_path, hf_model_
     with open(train_config_path, "r") as f:
         train_config = json.load(f)
 
+    if "drop_rate" not in model_config:
+        if "drop_rate" in train_config:
+            model_config["drop_rate"] = train_config["drop_rate"]
+            del train_config["drop_rate"]
+        else:
+            model_config["drop_rate"] = 0.0
+
     GPJTGPT2Config.register_for_auto_class()
     GPJTGPT2Model.register_for_auto_class("AutoModel")
     GPJTGPT2ModelForCausalLM.register_for_auto_class("AutoModelForCausalLM")
