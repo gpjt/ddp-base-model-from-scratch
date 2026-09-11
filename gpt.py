@@ -129,7 +129,7 @@ class MixtureOfExperts(nn.Module):
 
 
     def forward(self, xs):
-        # See moe-calculations-explainer.ipynb for an explanation of how this
+        # See https://www.gilesthomas.com/2026/09/gpt-2-to-moe for an explanation
         # all works.
         routing_logits = self.router(xs)
 

@@ -343,8 +343,7 @@ def calculate_loss(logits, targets):
 
 
 def calculate_moe_router_loss(moe_routing_info):
-    # See moe-calculations-explainer.ipynb for how this all came about.
-    # This is the "sum loss per layer" implementation there.
+    # See https://www.gilesthomas.com/2026/09/gpt-2-to-moe for how this all works.
     total_routing_loss = 0
     for routing_logits, expert_weights in moe_routing_info:
         batch_size, seq_len, num_experts = expert_weights.shape
