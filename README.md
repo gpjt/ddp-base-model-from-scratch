@@ -37,6 +37,7 @@ It’s designed as a small, educational-ish “base model pre-train” pipeline 
 ## Features
 
 - GPT-2-style transformer implemented directly in `gpt.py`
+- MoE support via configuration
 - Tokenised FineWeb / FineWeb-Edu dataset stored as `safetensors` with a single `tokens` vector
 - Multi-GPU training using PyTorch Distributed Data Parallel (`torch.distributed`, `DDP`)
 - Automatic dataset download using `huggingface_hub.snapshot_download`
@@ -204,6 +205,9 @@ Typical fields:
 - `n_layers` — number of transformer blocks
 - `drop_rate` — dropout probability
 - `qkv_bias` — boolean for linear layer bias in Q/K/V projections
+- `moe` -- an optional dict.  If it's not set, the model will be a normal dense GPT-2-style one.  If
+    if is set to a dictionary containing `num_experts` set to a number and `num_active_experts` set to
+    a number > 2 and <= `num_experts`, the model with be a mixture of experts with the given parameters.
 
 Example (roughly GPT-2 small-ish):
 
@@ -232,6 +236,9 @@ Fields:
 - `microbatch_size`: per-GPU micro-batch size
 - `validation_interval`: how often (in global steps) to run validation & checkpoint
 - `validation_batches`: how many batches to use when computing validation loss
+- `moe_router_loss_scale`: if training an MoE, this will be used to scale the router
+    auxiliary loss against the normal training loss; a value of 0.01 / `num_active_experts`
+    seems to work well.
 
 Example:
 
