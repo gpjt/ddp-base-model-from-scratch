@@ -8,6 +8,8 @@
 #
 # Modifications copyright 2025, 2026 Giles Thomas
 
+import math
+
 import torch
 import torch.nn as nn
 
@@ -203,7 +205,20 @@ class GPTModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
-        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
+        if "lore" in cfg and cfg["lore"].get("input_embeddings", False):
+            self.tok_emb = nn.Sequential(
+                nn.Embedding(cfg["vocab_size"], cfg["lore"]["rank"]),
+                nn.Linear(cfg["lore"]["rank"], cfg["emb_dim"], bias=False)
+            )
+            if cfg["lore"].get("smart_initialise", False):
+                nn.init.normal_(
+                    self.tok_emb[1].weight,
+                    mean=0.0,
+                    std=1.0 / math.sqrt(cfg["lore"]["rank"])
+                )
+        else:
+            self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
+
         self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
         self.drop_emb = nn.Dropout(cfg["drop_rate"])
 
@@ -213,9 +228,26 @@ class GPTModel(nn.Module):
 
         self.final_norm = LayerNorm(cfg["emb_dim"])
 
-        self.out_head = nn.Linear(
-            cfg["emb_dim"], cfg["vocab_size"], bias=False
-        )
+        if "lore" in cfg and cfg["lore"].get("output_head", False):
+            self.out_head = nn.Sequential(
+                nn.Linear(
+                    cfg["emb_dim"], cfg["lore"]["rank"], bias=False
+                ),
+                nn.Linear(
+                    cfg["lore"]["rank"], cfg["vocab_size"], bias=False
+                ),
+            )
+            if cfg["lore"].get("smart_initialise", False):
+                nn.init.normal_(
+                    self.out_head[0].weight,
+                    mean=0.0,
+                    std=1.0 / math.sqrt(cfg["lore"]["rank"])
+                )
+        else:
+            self.out_head = nn.Linear(
+                cfg["emb_dim"], cfg["vocab_size"], bias=False
+            )
+
         if cfg.get("tie_weights", False):
             self.out_head.weight = self.tok_emb.weight
 
