@@ -10,6 +10,6 @@
         "rank": 128,
         "input_embeddings": false,
         "output_head": false,
-        "smart_initialise": false
+        "smart_initialize": false
     }
 }

@@ -210,7 +210,7 @@ class GPTModel(nn.Module):
                 nn.Embedding(cfg["vocab_size"], cfg["lore"]["rank"]),
                 nn.Linear(cfg["lore"]["rank"], cfg["emb_dim"], bias=False)
             )
-            if cfg["lore"].get("smart_initialise", False):
+            if cfg["lore"].get("smart_initialize", False):
                 nn.init.normal_(
                     self.tok_emb[1].weight,
                     mean=0.0,
@@ -237,7 +237,7 @@ class GPTModel(nn.Module):
                     cfg["lore"]["rank"], cfg["vocab_size"], bias=False
                 ),
             )
-            if cfg["lore"].get("smart_initialise", False):
+            if cfg["lore"].get("smart_initialize", False):
                 nn.init.normal_(
                     self.out_head[0].weight,
                     mean=0.0,
