@@ -205,19 +205,16 @@ class GPTModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
 
-        if "lore" in cfg and cfg["lore"].get("input_embeddings", False):
-            self.tok_emb = nn.Sequential(
+        if "lore" in cfg:
+            lore_tok_emb = nn.Sequential(
                 nn.Embedding(cfg["vocab_size"], cfg["lore"]["rank"]),
                 nn.Linear(cfg["lore"]["rank"], cfg["emb_dim"], bias=False)
             )
-            if cfg["lore"].get("smart_initialize", False):
-                nn.init.normal_(
-                    self.tok_emb[1].weight,
-                    mean=0.0,
-                    std=1.0 / math.sqrt(cfg["lore"]["rank"])
-                )
+        normal_tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
+        if "lore" in cfg and cfg["lore"].get("input_embeddings", False):
+            self.tok_emb = lore_tok_emb
         else:
-            self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"])
+            self.tok_emb = normal_tok_emb
 
         self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"])
         self.drop_emb = nn.Dropout(cfg["drop_rate"])
@@ -228,8 +225,8 @@ class GPTModel(nn.Module):
 
         self.final_norm = LayerNorm(cfg["emb_dim"])
 
-        if "lore" in cfg and cfg["lore"].get("output_head", False):
-            self.out_head = nn.Sequential(
+        if "lore" in cfg:
+            lore_out_head = nn.Sequential(
                 nn.Linear(
                     cfg["emb_dim"], cfg["lore"]["rank"], bias=False
                 ),
@@ -237,19 +234,29 @@ class GPTModel(nn.Module):
                     cfg["lore"]["rank"], cfg["vocab_size"], bias=False
                 ),
             )
-            if cfg["lore"].get("smart_initialize", False):
-                nn.init.normal_(
-                    self.out_head[0].weight,
-                    mean=0.0,
-                    std=1.0 / math.sqrt(cfg["lore"]["rank"])
-                )
+        normal_out_head = nn.Linear(
+            cfg["emb_dim"], cfg["vocab_size"], bias=False
+        )
+        if "lore" in cfg and cfg["lore"].get("output_head", False):
+            self.out_head = lore_out_head
         else:
-            self.out_head = nn.Linear(
-                cfg["emb_dim"], cfg["vocab_size"], bias=False
-            )
+            self.out_head = normal_out_head
 
         if cfg.get("tie_weights", False):
             self.out_head.weight = self.tok_emb.weight
+
+        if "lore" in cfg:
+            if cfg["lore"].get("smart_initialize", False):
+                nn.init.normal_(
+                    lore_tok_emb[1].weight,
+                    mean=0.0,
+                    std=1.0 / math.sqrt(cfg["lore"]["rank"])
+                )
+                nn.init.normal_(
+                    lore_out_head[0].weight,
+                    mean=0.0,
+                    std=1.0 / math.sqrt(cfg["lore"]["rank"])
+                )
 
 
     def forward(self, in_idx):
