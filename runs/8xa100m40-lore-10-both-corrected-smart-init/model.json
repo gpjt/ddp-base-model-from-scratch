@@ -8,8 +8,8 @@
     "qkv_bias": false,
     "lore": {
         "rank": 128,
-        "input_embeddings": false,
+        "input_embeddings": true,
         "output_head": true,
-        "smart_initialize": "original"
+        "smart_initialize": "corrected"
     }
 }

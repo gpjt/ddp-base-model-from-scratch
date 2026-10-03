@@ -246,14 +246,20 @@ class GPTModel(nn.Module):
             self.out_head.weight = self.tok_emb.weight
 
         if "lore" in cfg:
-            if cfg["lore"].get("smart_initialize", False):
+            smart_initialize = cfg["lore"].get("smart_initialize", False)
+            if smart_initialize not in (False, "original", "corrected"):
+                raise Exception(f"Unknown value for `smart_initialize`: {smart_initialize}")
+            if smart_initialize:
                 nn.init.normal_(
                     lore_tok_emb[1].weight,
                     mean=0.0,
                     std=1.0 / math.sqrt(cfg["lore"]["rank"])
                 )
+                out_head_matrix = 0
+                if smart_initialize == "corrected":
+                    out_head_matrix = 1
                 nn.init.normal_(
-                    lore_out_head[0].weight,
+                    lore_out_head[out_head_matrix].weight,
                     mean=0.0,
                     std=1.0 / math.sqrt(cfg["lore"]["rank"])
                 )
