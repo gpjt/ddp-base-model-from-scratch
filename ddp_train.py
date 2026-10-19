@@ -213,7 +213,7 @@ def generate_training_charts(run_dir, clipping_max_norm):
         )
 
     ax_router = None
-    if avg_moe_router_losses:
+    if avg_moe_router_losses and not all(l == 0 for (_, l) in avg_moe_router_losses):
         ax_router = ax_loss.twinx()
 
         router_steps, min_router_losses = zip(*min_moe_router_losses)
