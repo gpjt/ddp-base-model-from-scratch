@@ -112,30 +112,23 @@ class RMSNorm(nn.Module):
         return (xs / rms) * self.scale
 
 
-class Norm(nn.Module):
-
-    def __init__(self, cfg):
-        super().__init__()
-        norm_type = cfg.get("norm_type", "handrolled_layernorm")
-        if norm_type == "handrolled_layernorm":
-            self.norm = LayerNorm(cfg["emb_dim"])
-        elif norm_type == "pytorch_layernorm":
-            self.norm = nn.LayerNorm(normalized_shape=cfg["emb_dim"], eps=LAYERNORM_EPS)
-        elif norm_type == "handrolled_rmsnorm":
-            self.norm = RMSNorm(cfg["emb_dim"])
-        elif norm_type == "pytorch_rmsnorm":
-            self.norm = nn.RMSNorm(
-                normalized_shape=cfg["emb_dim"], eps=RMSNORM_EPS,
-                elementwise_affine=True
-            )
-        elif norm_type == "no_norm":
-            self.norm = nn.Identity()
-        else:
-            raise Exception(f"Unknown `norm_type` of {norm_type!r}")
-
-
-    def forward(self, xs):
-        return self.norm(xs)
+def make_norm(cfg):
+    norm_type = cfg.get("norm_type", "handrolled_layernorm")
+    if norm_type == "handrolled_layernorm":
+        return LayerNorm(cfg["emb_dim"])
+    elif norm_type == "pytorch_layernorm":
+        return nn.LayerNorm(normalized_shape=cfg["emb_dim"], eps=LAYERNORM_EPS)
+    elif norm_type == "handrolled_rmsnorm":
+        return RMSNorm(cfg["emb_dim"])
+    elif norm_type == "pytorch_rmsnorm":
+        return nn.RMSNorm(
+            normalized_shape=cfg["emb_dim"], eps=RMSNORM_EPS,
+            elementwise_affine=True
+        )
+    elif norm_type == "no_norm":
+        return nn.Identity()
+    else:
+        raise Exception(f"Unknown `norm_type` of {norm_type!r}")
 
 
 
@@ -217,8 +210,8 @@ class TransformersBlock(nn.Module):
             self.ff = MixtureOfExperts(cfg)
         else:
             self.ff = FeedForward(cfg)
-        self.norm1 = Norm(cfg)
-        self.norm2 = Norm(cfg)
+        self.norm1 = make_norm(cfg)
+        self.norm2 = make_norm(cfg)
         self.drop_shortcut = nn.Dropout(cfg["drop_rate"])
 
 
@@ -258,7 +251,7 @@ class GPTModel(nn.Module):
             *[TransformersBlock(cfg) for _ in range(cfg["n_layers"])]
         )
 
-        self.final_norm = Norm(cfg)
+        self.final_norm = make_norm(cfg)
 
         self.out_head = nn.Linear(
             cfg["emb_dim"], cfg["vocab_size"], bias=False
